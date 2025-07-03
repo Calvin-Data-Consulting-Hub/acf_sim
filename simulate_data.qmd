@@ -1,0 +1,128 @@
+---
+title: "Simulation for ACF Lag-1 Values"
+format: 
+  html:
+    toc: true
+    code-tools: true
+    embed-resources: true
+  pdf: default
+editor: source
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+library(tidyverse)
+library(glmmTMB)
+library(ggformula)
+
+theme_set(theme_minimal(base_size = 12))
+```
+
+
+# Overview, Goals
+
+The process should be something like:
+
+1. Simulate data from model
+2. Fit model
+3. Compute residuals
+4. Compute residual ACF (*note: if you run `acf_out <- acf(resid(model), plot = FALSE)`, then `acf_out$acf[acf_out$lag == 1]` should be the value you want...*)
+5. Store ACF value at lag 1
+
+Repeat many times (1,000 is a good start) to get many exemplars of lag-1 ACF values.
+
+May want to also repeat the entire process for cases with:
+
+- Top priority:
+  - Different numbers of cases per random effect group (more than just 2)
+  - Vary random effect standard deviation (try 0.1, 0.25, 1, 2, 4?)
+- Other ideas to discuss/try:
+  - Random values of slope, intercept, RE variance parameters (sampled from distributions instead of fixed numbers)
+  - Larger or smaller random effect variance
+  - Binary or count model rather than just normal model
+  
+## Note!
+It's possible the lag-1 phenomenon only happens with nested random effects. If that is the case then the simulation will be more complicated, so pause...
+
+# Tips about Process
+
+You could use a [for loop](https://r4ds.hadley.nz/base-R.html#for-loops) and just do "by hand" all the steps of the process 1,000 (or however many times).
+
+You might consider [writing a function](https://r4ds.hadley.nz/functions.html) (like maybe call it `get_acf1()`?) that takes as input all the "settings" (parameter values, model formula, etc) and then... generates a dataset, fits a model, gets the residuals, and grabs the ACF at lag 1. Then in your for loop, you would just call that function many times.
+
+If you end up iterating over lots of different combinations of "settings" you might consider using either [apply functions](https://r4ds.hadley.nz/base-R.html#apply-family) or the tidyverse equivalent (which I admit I sometimes struggle with depending on the complexity of what I am trying to do!), the [map functions](https://purrr.tidyverse.org/index.html). There is a little bit of help online about how these two approaches match up with each other: <https://purrr.tidyverse.org/articles/base.html>
+  
+# Data Simulation
+
+To get you started, here is code to simulate one dataset, assuming the model:
+
+$$
+\text{response}_i = \alpha_{k_i} + 0 + 1.5 * x_{1i} - 0.5 * x_{2i} + \epsilon_i,
+$$
+
+$$
+\epsilon \sim N(0, 1)
+$$
+
+and $\alpha_{k_i}$ is the group-specific random intercept for the $k$th random-effect group. The $i$th datapoint will be a member of *one* of the $k$ random effect groups, and $\alpha_k \sim N(0,0.5)$
+
+The predictors $x_1$ and $x_2$ will be simulated from standard normal (N(0,1)) distributions.
+
+## Set parameter values and dataset size
+
+```{r}
+#| label: sim-settings
+
+# rows in sim dataset
+n <- 500
+# size of RE groups
+n_re <- 2
+# x1 slope
+b1 <- 1.5
+# x2 slope
+b2 <- -0.5
+# random intercept standard deviation
+group_sd <- 0.5
+# residual standard deviation
+resid_sd <- 1
+```
+
+```{r}
+#| label: data-sim
+
+sim_data <- data.frame(
+  # values of predictor #1
+  x1 = rnorm(n, mean = 0, sd = 1),
+  # values of predictor #2
+  x2 = rnorm(n, mean = 0, sd = 1),
+  # random effect group assignment
+  re_group = gl(n = floor(n/2),
+                k = n_re,
+                length = n),
+  # residuals
+  resid = rnorm(n, mean = 0, sd = resid_sd)) |>
+  # random intercepts
+  group_by(re_group) |>
+  mutate(alpha = rnorm(1, mean = 0, sd = group_sd)) |>
+  ungroup() |>
+  mutate(response = 0 + alpha + b1 * x1 + b2 * x2 + resid)
+```
+
+Check out the result: each data point has its own predictor variable values and residual value. Each *random effect group* has the same random intercept value $\alpha$ (a sample from a normal distribution with mean 0 and sd = "what we specified", which was 0.5 here).
+
+```{r}
+glimpse(sim_data)
+```
+
+We should be able to verify that the slope for `x1` is about `b1`, etc. via graphs for fitting the model...just to check:
+
+```{r}
+gf_point(response ~ x1, data = sim_data)
+gf_point(response ~ x2, data = sim_data)
+model <- glmmTMB(response ~ x1 + x2 + (1 | re_group), data = sim_data)
+summary(model)
+acf(resid(model))
+```
+
