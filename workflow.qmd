@@ -1,0 +1,134 @@
+---
+title: "Workflow"
+format: 
+  html:
+    toc: true
+    code-tools: true
+    embed-resources: true
+  pdf: default
+editor: source
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+library(tidyverse)
+library(glmmTMB)
+library(ggformula)
+library(dplyr)
+library(broom)
+
+theme_set(theme_minimal(base_size = 12))
+
+knitr::opts_chunk$set(echo = TRUE,
+                      # change to true to cache results
+                      cache = FALSE)
+```
+
+
+$$
+\text{response}_i = \alpha_{k_i} + 0 + 1.5 * x_{1i} - 0.5 * x_{2i} + \epsilon_i,
+$$
+
+$$
+\epsilon \sim N(0, 1)
+$$
+
+## Set parameter values and dataset size
+
+```{r}
+#| label: sim-settings
+
+# rows in sim dataset
+n <- 500
+# size of RE groups
+n_re <- 2
+# x1 slope
+b1 <- 1.5
+# x2 slope
+b2 <- -0.5
+# random intercept standard deviation
+group_sd <- 0.5
+# residual standard deviation
+resid_sd <- 1
+```
+
+
+```{r}
+#| eval: false
+
+# test case 
+sim_data <- data.frame(
+    x1 = rnorm(n, mean = 0, sd = 1),
+    x2 = rnorm(n, mean = 0, sd = 1),
+    x3 = rnorm(n, mean = 0, sd = 1),
+    re_group = gl(n = floor(n / 2), k = n_re, length = n),
+    resid = rnorm(n, mean = 0, sd = resid_sd)
+  ) |>
+    group_by(re_group) |>
+    mutate(alpha = rnorm(1, mean = 0, sd = group_sd)) |>
+    ungroup() |>
+    mutate(response = 0 + alpha + b1 * x1 + b2 * x2 + resid)
+
+  model <- glmmTMB(response ~ x1 + x2 + x3 + (1 | re_group), data = sim_data)
+
+  coef_df <- as.data.frame(summary(model)$coefficients$cond)
+  glimpse(coef_df)
+```
+
+
+```{r}
+
+# Preallocate result
+result <- data.frame(acfs = rep(NA, n),
+                     b1 = rep(NA,n),
+                     p_x1 = rep(NA,n),
+                     b2 = rep(NA,n),
+                     p_x2 = rep(NA,n),
+                     b3 = rep(NA,n),
+                     p_x3 = rep(NA,n)
+                     )
+
+# for loop
+
+for(i in 1:500){
+  sim_data <- data.frame(
+    x1 = rnorm(n, mean = 0, sd = 1),
+    x2 = rnorm(n, mean = 0, sd = 1),
+    x3 = rnorm(n, mean = 0, sd = 1),
+    re_group = gl(n = floor(n / 2), k = n_re, length = n),
+    resid = rnorm(n, mean = 0, sd = resid_sd)
+  ) |>
+    group_by(re_group) |>
+    mutate(alpha = rnorm(1, mean = 0, sd = group_sd)) |>
+    ungroup() |>
+    mutate(response = 0 + alpha + b1 * x1 + b2 * x2 + resid)
+
+  model <- glmmTMB(response ~ x1 + x2 + x3 + (1 | re_group), data = sim_data)
+
+  acf_out <- acf(resid(model), plot = FALSE)
+  
+  coef_df <- as.data.frame(summary(model)$coefficients$cond)
+  
+  result$b1[i] <- coef_df["x1", "Estimate"]
+  
+  result$b2[i] <- coef_df["x2", "Estimate"]
+  
+  result$b3[i] <- coef_df["x3", "Estimate"]
+  
+  result$p_x1[i] <- coef_df["x1", "Pr(>|z|)"]
+  
+  result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
+  
+  result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
+
+  result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
+}
+```
+```{r}
+glimpse(result)
+```
+
+
+
