@@ -18,6 +18,7 @@ library(glmmTMB)
 library(ggformula)
 library(dplyr)
 library(broom)
+library(ggformula)
 
 theme_set(theme_minimal(base_size = 12))
 
@@ -37,8 +38,10 @@ $$
 
 ## Set parameter values and dataset size
 
+
 ```{r}
-#| label: sim-settings
+#| eval: false
+#| label: test case
 
 # rows in sim dataset
 n <- 500
@@ -52,13 +55,7 @@ b2 <- -0.5
 group_sd <- 0.5
 # residual standard deviation
 resid_sd <- 1
-```
 
-
-```{r}
-#| eval: false
-
-# test case 
 sim_data <- data.frame(
     x1 = rnorm(n, mean = 0, sd = 1),
     x2 = rnorm(n, mean = 0, sd = 1),
@@ -79,6 +76,20 @@ sim_data <- data.frame(
 
 
 ```{r}
+# simulation setting 
+
+n <- 500 # rows in sim dataset
+
+n_re <- 2 # size of RE groups
+
+b1 <- 1.5 # x1 slope
+
+b2 <- -0.5 # x2 slope
+
+# random intercept standard deviation
+group_sd <- 0.5
+# residual standard deviation
+resid_sd <- 1
 
 # Preallocate result
 result <- data.frame(acfs = rep(NA, n),
@@ -130,5 +141,82 @@ for(i in 1:500){
 glimpse(result)
 ```
 
+```{r}
+gf_histogram(~acfs, data = result)
+```
 
+```{r}
+
+# Preallocate result
+result <- data.frame(acfs = rep(NA, n),
+                     b1 = rep(NA,n),
+                     p_x1 = rep(NA,n),
+                     b2 = rep(NA,n),
+                     p_x2 = rep(NA,n),
+                     b3 = rep(NA,n),
+                     p_x3 = rep(NA,n),
+                     n_re = rep(NA,n)  # number of Random Effect Group
+                     )
+
+# for loop
+
+for(i in 1:n){
+  
+  if(i < n/5){
+    n_re <- 2
+  } else if(i < 2*n/5){
+    n_re <- 3
+  } else if(i < 3*n/5){
+    n_re <- 4
+  } else if(i < 4*n/5){
+    n_re <- 5
+  } else {
+    n_re <- 6
+  }
+  
+  sim_data <- data.frame(
+    x1 = rnorm(n, mean = 0, sd = 1),
+    x2 = rnorm(n, mean = 0, sd = 1),
+    x3 = rnorm(n, mean = 0, sd = 1),
+    re_group = gl(n = floor(n / 2), k = n_re, length = n),
+    resid = rnorm(n, mean = 0, sd = resid_sd)
+  ) |>
+    group_by(re_group) |>
+    mutate(alpha = rnorm(1, mean = 0, sd = group_sd)) |>
+    ungroup() |>
+    mutate(response = 0 + alpha + b1 * x1 + b2 * x2 + resid)
+
+  model <- glmmTMB(response ~ x1 + x2 + x3 + (1 | re_group), data = sim_data)
+
+  acf_out <- acf(resid(model), plot = FALSE)
+  
+  coef_df <- as.data.frame(summary(model)$coefficients$cond)
+  
+  result$b1[i] <- coef_df["x1", "Estimate"]
+  
+  result$b2[i] <- coef_df["x2", "Estimate"]
+  
+  result$b3[i] <- coef_df["x3", "Estimate"]
+  
+  result$p_x1[i] <- coef_df["x1", "Pr(>|z|)"]
+  
+  result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
+  
+  result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
+
+  result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
+  
+  result$n_re[i] <- n_re
+}
+
+glimpse(result)
+
+```
+
+```{r}
+result <- result |>
+  mutate(n_re = as.factor(n_re))
+
+gf_boxplot(acfs ~ n_re, data = result)
+```
 
