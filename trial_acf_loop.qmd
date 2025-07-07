@@ -1,0 +1,101 @@
+---
+title: "trial acf stuff"
+format: pdf
+editor: source
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+library(tidyverse)
+library(glmmTMB)
+library(ggformula)
+
+theme_set(theme_minimal(base_size = 12))
+
+knitr::opts_chunk$set(echo = TRUE,
+                      # change to true to cache results
+                      cache = FALSE)
+```
+
+```{r}
+# rows in sim dataset
+n <- 500
+# size of RE groups
+n_re <- 2
+# x1 slope
+b1 <- 1.5
+# x2 slope
+b2 <- -0.5
+# random intercept standard deviation
+group_sd <- 0.5
+# residual standard deviation
+resid_sd <- 1
+```
+
+
+```{r}
+acf_values = data.frame(acfs = rep.int(NA, 1000)) # premade data frame of proper current length
+
+for (i in 1:1000) {
+  sim_data <- data.frame(
+    # values of predictor #1
+    x1 = rnorm(n, mean = 0, sd = 1),
+    # values of predictor #2
+    x2 = rnorm(n, mean = 0, sd = 1),
+    # third candidate predictor that is NOT assoc w/respone
+    x3 = rnorm(n, mean = 0, sd = 1),
+    # random effect group assignment
+    re_group = gl(n = floor(n/2),
+                  k = n_re,
+                  length = n),
+    # residuals
+    resid = rnorm(n, mean = 0, sd = resid_sd)) |>
+    # random intercepts
+    group_by(re_group) |>
+    mutate(alpha = rnorm(1, mean = 0, sd = group_sd)) |>
+    ungroup() |>
+    mutate(response = 0 + alpha + b1 * x1 + b2 * x2 + resid) # note: response value does not include x3
+  
+    model <- glmmTMB(response ~ x1 + x2 + (1 | re_group), data = sim_data)
+    summary(model)
+    acf_out <- acf(resid(model), plot = FALSE)
+    acf_values$acfs[i] = acf_out$acf[acf_out$lag == 1] # send values at lag 1 to the premade data frame
+}
+```
+
+
+```{r}
+acf_logicals = data.frame(acfs = rep.int(NA, 1000)) # create a data frame for logicals of greater than 0 or not
+
+for (i in 1:1000) {
+  acf_logicals$acfs[i] <- acf_values$acfs[i] < 0
+  if(acf_values$acfs[i] >= 0) {
+    print(i)
+    print(acf_values$acfs[i]) 
+    # print the values greater than 0 and where they occur (for my own ability to judge if it seems skewed)
+    # (this is not actually important)
+    }
+}
+```
+
+```{r}
+acf_greater = list() # test list for being beyond the bound
+counter = 1
+for (i in 1:1000) {
+  if(acf_values$acfs[i] <= -.1) { # the bound is currently set at -.1 based on my eyeballing it
+                                  # this will need to change as its actually based on sample size
+   acf_greater[counter] <- acf_values$acfs[i]
+   counter = counter + 1 # used because if you use i, it creates a lot of empty rows (I know this is kind of a janky setup)
+  }
+}
+```
+
+
+
+
+
+
+
+
