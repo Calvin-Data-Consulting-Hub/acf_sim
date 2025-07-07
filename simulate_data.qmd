@@ -18,6 +18,10 @@ library(glmmTMB)
 library(ggformula)
 
 theme_set(theme_minimal(base_size = 12))
+
+knitr::opts_chunk$set(echo = TRUE,
+                      # change to true to cache results
+                      cache = FALSE)
 ```
 
 
@@ -38,6 +42,9 @@ May want to also repeat the entire process for cases with:
 - Top priority:
   - Different numbers of cases per random effect group (more than just 2)
   - Vary random effect standard deviation (try 0.1, 0.25, 1, 2, 4?)
+- Second priority:
+  - Store slope estimates, SE, and p-value for fitted model in each loop iteration (will need to grab these from fitted model object or its summary; might help to use `broom` package and its function `tidy()`: <https://broom.tidymodels.org/>)
+  - Also fit model without the RE and store ACF lag 1, slopes, SEs, and p-values
 - Other ideas to discuss/try:
   - Random values of slope, intercept, RE variance parameters (sampled from distributions instead of fixed numbers)
   - Larger or smaller random effect variance
@@ -97,6 +104,8 @@ sim_data <- data.frame(
   x1 = rnorm(n, mean = 0, sd = 1),
   # values of predictor #2
   x2 = rnorm(n, mean = 0, sd = 1),
+  # third candidate predictor that is NOT assoc w/respone
+  x3 = rnorm(n, mean = 0, sd = 1),
   # random effect group assignment
   re_group = gl(n = floor(n/2),
                 k = n_re,
@@ -121,7 +130,8 @@ We should be able to verify that the slope for `x1` is about `b1`, etc. via grap
 ```{r}
 gf_point(response ~ x1, data = sim_data)
 gf_point(response ~ x2, data = sim_data)
-model <- glmmTMB(response ~ x1 + x2 + (1 | re_group), data = sim_data)
+model <- glmmTMB(response ~ x1 + x2 + x3 + (1 | re_group), 
+                 data = sim_data)
 summary(model)
 acf(resid(model))
 ```
