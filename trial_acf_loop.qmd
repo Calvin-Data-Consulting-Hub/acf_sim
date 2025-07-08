@@ -4,15 +4,7 @@ format: pdf
 editor: source
 ---
 
-Top priority:
-  - Different numbers of cases per random effect group (more than just 2)
-  - Vary random effect standard deviation (try 0.1, 0.25, 1, 2, 4?)
-- Second priority:
-  - Store slope estimates, SE, and p-value for fitted model in each loop iteration (will need to grab these from fitted model object or its summary; might help to use `broom` package and its function `tidy()`: <https://broom.tidymodels.org/>)
-  - Also fit model without the RE and store ACF lag 1, slopes, SEs, and p-values
-  
-Priscilla did some work on this, but the SE still needs to be collected using broom::tidy(model_name) and then probably some indexing? Not totally sure about that part...
-
+### Setup
 ```{r}
 #| label: setup
 #| include: false
@@ -43,7 +35,7 @@ group_sd <- 0.5
 resid_sd <- 1
 ```
 
-
+### Standard Trial
 ```{r}
 acf_values = data.frame(acfs = rep.int(NA, 500)) # premade data frame of proper current length
 
@@ -74,21 +66,7 @@ for (i in 1:500) {
 }
 ```
 
-
-```{r}
-acf_logicals = data.frame(acfs = rep.int(NA, 500)) # create a data frame for logicals of greater than 0 or not
-
-for (i in 1:500) {
-  acf_logicals$acfs[i] <- acf_values$acfs[i] < 0
-  if(acf_values$acfs[i] >= 0) {
-    print(i)
-    print(acf_values$acfs[i]) 
-    # print the values greater than 0 and where they occur (for my own ability to judge if it seems skewed)
-    # (this is not actually important)
-    }
-}
-```
-
+### Find number below the lower bound (needs work)
 ```{r}
 acf_greater = list() # test list for being beyond the bound
 counter = 1
@@ -101,13 +79,23 @@ for (i in 1:500) {
 }
 ```
 
+`x <- na.action(as.ts(x))`
+`x.freq <- frequency(x)`
+`x <- as.matrix(x)`
+`sampleT <- as.integer(nrow(x))`
+`nser <- as.integer(ncol(x))`
 
-if (is.null(lag.max)) 
-        lag.max <- floor(10 * (log10(sampleT) - log10(nser)))
-    lag.max <- as.integer(min(lag.max, sampleT - 1L))
+`if (is.null(lag.max)) `
+        `lag.max <- floor(10 * (log10(sampleT) - log10(nser)))`
+    `lag.max <- as.integer(min(lag.max, sampleT - 1L))`
     
-appears to be the way to calculate the bounds for the acf, though I'm not sure
-    
+appears to be the way to calculate the bounds of the acf, though I'm not sure (found by typing `acf` into the console)
+
+seems like you need to make x a matrix, find the number of rows and columns, and then take the log10 of the numbers while doing some more math to them
+
+x is the thing you put into the `acf()` function, so the residuals of `model` in this case (`resid(model)`)
+
+### Trial without the RE 
 ```{r}
 # without the RE
 
@@ -168,9 +156,8 @@ for (i in 1:n) {
 glimpse(result)
 ```
 
-
 ```{r}
-# without the RE
+# graphs without the RE
 
 gf_histogram(~acfs, data = result)
 
@@ -178,7 +165,4 @@ gf_boxplot(~acfs, data = result)
 ```
 
 acfs are much more centered around zero when there are no random effects, but they do still skew slightly negative
-
-
-
 
