@@ -4,6 +4,15 @@ format: pdf
 editor: source
 ---
 
+Top priority:
+  - Different numbers of cases per random effect group (more than just 2)
+  - Vary random effect standard deviation (try 0.1, 0.25, 1, 2, 4?)
+- Second priority:
+  - Store slope estimates, SE, and p-value for fitted model in each loop iteration (will need to grab these from fitted model object or its summary; might help to use `broom` package and its function `tidy()`: <https://broom.tidymodels.org/>)
+  - Also fit model without the RE and store ACF lag 1, slopes, SEs, and p-values
+  
+Priscilla did some work on this, but the SE still needs to be collected using broom::tidy(model_name) and then probably some indexing? Not totally sure about that part...
+
 ```{r}
 #| label: setup
 #| include: false
@@ -36,9 +45,9 @@ resid_sd <- 1
 
 
 ```{r}
-acf_values = data.frame(acfs = rep.int(NA, 1000)) # premade data frame of proper current length
+acf_values = data.frame(acfs = rep.int(NA, 500)) # premade data frame of proper current length
 
-for (i in 1:1000) {
+for (i in 1:500) {
   sim_data <- data.frame(
     # values of predictor #1
     x1 = rnorm(n, mean = 0, sd = 1),
@@ -67,9 +76,9 @@ for (i in 1:1000) {
 
 
 ```{r}
-acf_logicals = data.frame(acfs = rep.int(NA, 1000)) # create a data frame for logicals of greater than 0 or not
+acf_logicals = data.frame(acfs = rep.int(NA, 500)) # create a data frame for logicals of greater than 0 or not
 
-for (i in 1:1000) {
+for (i in 1:500) {
   acf_logicals$acfs[i] <- acf_values$acfs[i] < 0
   if(acf_values$acfs[i] >= 0) {
     print(i)
@@ -83,7 +92,7 @@ for (i in 1:1000) {
 ```{r}
 acf_greater = list() # test list for being beyond the bound
 counter = 1
-for (i in 1:1000) {
+for (i in 1:500) {
   if(acf_values$acfs[i] <= -.1) { # the bound is currently set at -.1 based on my eyeballing it
                                   # this will need to change as its actually based on sample size
    acf_greater[counter] <- acf_values$acfs[i]
@@ -93,8 +102,82 @@ for (i in 1:1000) {
 ```
 
 
+if (is.null(lag.max)) 
+        lag.max <- floor(10 * (log10(sampleT) - log10(nser)))
+    lag.max <- as.integer(min(lag.max, sampleT - 1L))
+    
+appears to be the way to calculate the bounds for the acf, though I'm not sure
+    
+```{r}
+# without the RE
+
+result <- data.frame(acfs = rep(NA, n),
+                     b1 = rep(NA,n),
+                     se_x1 = rep(NA, n),
+                     p_x1 = rep(NA,n),
+                     b2 = rep(NA,n),
+                     se_x2 = rep(NA, n),
+                     p_x2 = rep(NA,n),
+                     b3 = rep(NA,n),
+                     se_x3 = rep(NA, n),
+                     p_x3 = rep(NA,n)
+)
 
 
+for (i in 1:n) {
+  sim_data <- data.frame(
+    x1 = rnorm(n, mean = 0, sd = 1),
+    x2 = rnorm(n, mean = 0, sd = 1),
+    x3 = rnorm(n, mean = 0, sd = 1),
+    resid = rnorm(n, mean = 0, sd = resid_sd)
+  ) |>
+    mutate(alpha = rnorm(1, mean = 0, sd = group_sd)) |>
+    ungroup() |>
+    mutate(response = 0 + alpha + b1 * x1 + b2 * x2 + resid)
+
+  model <- glmmTMB(response ~ x1 + x2 + x3, data = sim_data)
+
+  acf_out <- acf(resid(model), plot = FALSE)
+  
+  coef_df <- as.data.frame(summary(model)$coefficients$cond)
+  
+  result$b1[i] <- coef_df["x1", "Estimate"]
+  
+  result$b2[i] <- coef_df["x2", "Estimate"]
+  
+  result$b3[i] <- coef_df["x3", "Estimate"]
+  
+  result$p_x1[i] <- coef_df["x1", "Pr(>|z|)"]
+  
+  result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
+  
+  result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
+
+  result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
+  
+  result$se_x1[i] <- coef_df["x1", "Std. Error"]
+  
+  result$se_x2[i] <- coef_df["x2", "Std. Error"]
+  
+  result$se_x3[i] <- coef_df["x3", "Std. Error"]
+}
+```
+
+```{r}
+# ACF lag 1, slopes, SEs, and p-values
+glimpse(result)
+```
+
+
+```{r}
+# without the RE
+
+gf_histogram(~acfs, data = result)
+
+gf_boxplot(~acfs, data = result)
+```
+
+acfs are much more centered around zero when there are no random effects, but they do still skew slightly negative
 
 
 
