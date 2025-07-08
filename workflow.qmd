@@ -76,7 +76,11 @@ sim_data <- data.frame(
 
 
 ```{r}
-# simulation setting 
+
+#| eval: false
+#| label: n_re = 2
+
+# simulation setting
 
 n <- 500 # rows in sim dataset
 
@@ -119,31 +123,28 @@ for(i in 1:500){
   model <- glmmTMB(response ~ x1 + x2 + x3 + (1 | re_group), data = sim_data)
 
   acf_out <- acf(resid(model), plot = FALSE)
-  
+
   coef_df <- as.data.frame(summary(model)$coefficients$cond)
-  
+
   result$b1[i] <- coef_df["x1", "Estimate"]
-  
+
   result$b2[i] <- coef_df["x2", "Estimate"]
-  
+
   result$b3[i] <- coef_df["x3", "Estimate"]
-  
+
   result$p_x1[i] <- coef_df["x1", "Pr(>|z|)"]
-  
+
   result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
-  
+
   result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
 
   result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
 }
-```
-```{r}
+
 glimpse(result)
 ```
 
-```{r}
-gf_histogram(~acfs, data = result)
-```
+# Different numbers of cases per random effect group
 
 ```{r}
 
@@ -165,13 +166,13 @@ for(i in 1:n){
   if(i < n/5){
     n_re <- 2
   } else if(i < 2*n/5){
-    n_re <- 3
-  } else if(i < 3*n/5){
     n_re <- 4
-  } else if(i < 4*n/5){
-    n_re <- 5
-  } else {
+  } else if(i < 3*n/5){
     n_re <- 6
+  } else if(i < 4*n/5){
+    n_re <- 8
+  } else {
+    n_re <- 10
   }
   
   sim_data <- data.frame(
@@ -210,13 +211,215 @@ for(i in 1:n){
 }
 
 glimpse(result)
-
 ```
 
 ```{r}
 result <- result |>
   mutate(n_re = as.factor(n_re))
-
-gf_boxplot(acfs ~ n_re, data = result)
 ```
+
+```{r}
+gf_histogram(~acfs|n_re, data = result)
+```
+
+
+```{r}
+gf_boxplot(acfs ~ n_re, fill = ~n_re, data = result)|>
+  gf_labs(x = "numbers of cases per random effect group",
+          y = "acf value of lag(1)")
+```
+
+# Vary random effect standard deviation
+
+```{r}
+
+# simulation setting
+
+n <- 500 # rows in sim dataset
+
+n_re <- 2 # size of RE groups
+
+b1 <- 1.5 # x1 slope
+
+b2 <- -0.5 # x2 slope
+
+# random intercept standard deviation
+group_sd <- 0.5
+# residual standard deviation
+resid_sd <- 1
+
+# Preallocate result
+result <- data.frame(acfs = rep(NA, n),
+                     b1 = rep(NA,n),
+                     p_x1 = rep(NA,n),
+                     b2 = rep(NA,n),
+                     p_x2 = rep(NA,n),
+                     b3 = rep(NA,n),
+                     p_x3 = rep(NA,n),
+                     group_sd = rep(NA,n)
+                     )
+
+# for loop
+
+for(i in 1:500){
+  
+  if(i < n/5){
+    group_sd <- 0.1
+    
+  } else if(i < 2*n/5){
+    group_sd <- 0.25
+  } else if(i < 3*n/5){
+    group_sd <- 1
+  } else if(i < 4*n/5){
+    group_sd <- 2
+  } else {
+    group_sd <- 4
+  }
+  
+  sim_data <- data.frame(
+    x1 = rnorm(n, mean = 0, sd = 1),
+    x2 = rnorm(n, mean = 0, sd = 1),
+    x3 = rnorm(n, mean = 0, sd = 1),
+    re_group = gl(n = floor(n / 2), k = n_re, length = n),
+    resid = rnorm(n, mean = 0, sd = resid_sd)
+  ) |>
+    group_by(re_group) |>
+    mutate(alpha = rnorm(1, mean = 0, sd = group_sd)) |>
+    ungroup() |>
+    mutate(response = 0 + alpha + b1 * x1 + b2 * x2 + resid)
+
+  model <- glmmTMB(response ~ x1 + x2 + x3 + (1 | re_group), data = sim_data)
+
+  acf_out <- acf(resid(model), plot = FALSE)
+
+  coef_df <- as.data.frame(summary(model)$coefficients$cond)
+
+  result$b1[i] <- coef_df["x1", "Estimate"]
+
+  result$b2[i] <- coef_df["x2", "Estimate"]
+
+  result$b3[i] <- coef_df["x3", "Estimate"]
+
+  result$p_x1[i] <- coef_df["x1", "Pr(>|z|)"]
+
+  result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
+
+  result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
+
+  result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
+  
+  result$group_sd[i] <- group_sd
+  
+}
+
+glimpse(result)
+```
+
+```{r}
+result <- result |>
+  mutate(group_sd = as.factor(group_sd))
+```
+
+```{r}
+gf_boxplot(acfs ~ group_sd, fill = ~group_sd, data = result)|>
+  gf_labs(x = "random effect standard deviation",
+          y = "acf value of lag(1)")
+```
+
+# model without the RE and store ACF lag 1, slopes, SEs, and p-values
+
+```{r}
+
+# simulation setting
+
+n <- 500 # rows in sim dataset
+
+n_re <- 2 # size of RE groups
+
+b1 <- 1.5 # x1 slope
+
+b2 <- -0.5 # x2 slope
+
+# random intercept standard deviation
+group_sd <- 0.5
+
+# residual standard deviation
+resid_sd <- 1
+
+# Preallocate result
+result <- data.frame(acfs = rep(NA, n),
+                     b1 = rep(NA,n),
+                     p_x1 = rep(NA,n),
+                     b2 = rep(NA,n),
+                     p_x2 = rep(NA,n),
+                     b3 = rep(NA,n),
+                     p_x3 = rep(NA,n),
+                     re = rep(NA, n)
+                     )
+
+
+# for loop
+
+for(i in 1:500){
+  
+# simulate data
+  sim_data <- data.frame(
+    x1 = rnorm(n, mean = 0, sd = 1),
+    x2 = rnorm(n, mean = 0, sd = 1),
+    x3 = rnorm(n, mean = 0, sd = 1),
+    re_group = gl(n = floor(n / 2), k = n_re, length = n),
+    resid = rnorm(n, mean = 0, sd = resid_sd)
+  ) |>
+    group_by(re_group) |>
+    mutate(alpha = rnorm(1, mean = 0, sd = group_sd)) |>
+    ungroup() |>
+    mutate(response = 0 + alpha + b1 * x1 + b2 * x2 + resid)
+
+# model
+  
+    if(i < n/5){
+    result$re[i] <- "random effect"
+    
+    model <- glmmTMB(response ~ x1 + x2 + x3 + (1 | re_group), data = sim_data)
+    
+  } else {
+    result$re[i] <- "no random effect"
+    
+    model <- glmmTMB(response ~ x1 + x2 + x3, data = sim_data)
+  }
+  
+
+  acf_out <- acf(resid(model), plot = FALSE)
+
+  coef_df <- as.data.frame(summary(model)$coefficients$cond)
+
+  result$b1[i] <- coef_df["x1", "Estimate"]
+
+  result$b2[i] <- coef_df["x2", "Estimate"]
+
+  result$b3[i] <- coef_df["x3", "Estimate"]
+
+  result$p_x1[i] <- coef_df["x1", "Pr(>|z|)"]
+
+  result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
+
+  result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
+
+  result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
+  
+}
+
+glimpse(result)
+```
+```{r}
+result_pivot <- result |>
+  pivot_longer(cols = c("b1","p_x1","b2","p_x2","b3","p_x3"),
+               names_to = "ids",
+               values_to = "values")
+```
+
+```{r}
+gf_boxplot(values ~ ids, fill = ~re, data = result_pivot)
+```
+
 
