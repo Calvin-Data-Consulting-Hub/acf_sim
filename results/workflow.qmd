@@ -37,7 +37,7 @@ $$
 \epsilon \sim N(0, 1)
 $$
 
-## Set parameter values and dataset size
+## Test cases
 
 
 ```{r}
@@ -100,10 +100,13 @@ resid_sd <- 1
 result <- data.frame(acfs = rep(NA, n),
                      b1 = rep(NA,n),
                      p_x1 = rep(NA,n),
+                     se_x1 = rep(NA,n),
                      b2 = rep(NA,n),
                      p_x2 = rep(NA,n),
+                     se_x1 = rep(NA,n),
                      b3 = rep(NA,n),
-                     p_x3 = rep(NA,n)
+                     p_x3 = rep(NA,n),
+                     se_x1 = rep(NA,n),
                      )
 
 # for loop
@@ -139,6 +142,12 @@ for(i in 1:500){
   result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
 
   result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
+  
+  result$se_x1[i] <- coef_df["x1","Std. Error"]
+  
+  result$se_x2[i] <- coef_df["x2","Std. Error"]
+  
+  result$se_x3[i] <- coef_df["x3","Std. Error"]
 
   result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
 }
@@ -146,6 +155,8 @@ for(i in 1:500){
 ```
 
 ```{r}
+#| eval: false
+
 acf_hist <- gf_histogram(~acfs, data = result)|>
   gf_labs(subtitle =  "frenquency of acfs at lag(1) for 500 simulated datasets and models") +
   theme(
@@ -157,7 +168,6 @@ ggsave(filename = "figures/acf_hist.png", plot = acf_hist, width = 6, height = 4
   
 ```
 
-
 # Different numbers of cases per random effect group
 
 ```{r}
@@ -166,10 +176,13 @@ ggsave(filename = "figures/acf_hist.png", plot = acf_hist, width = 6, height = 4
 result <- data.frame(acfs = rep(NA, n),
                      b1 = rep(NA,n),
                      p_x1 = rep(NA,n),
+                     se_x1 = rep(NA,n),
                      b2 = rep(NA,n),
                      p_x2 = rep(NA,n),
+                     se_x2 = rep(NA,n),
                      b3 = rep(NA,n),
                      p_x3 = rep(NA,n),
+                     se_x3 = rep(NA,n),
                      n_re = rep(NA,n)  # number of Random Effect Group
                      )
 
@@ -218,6 +231,12 @@ for(i in 1:n){
   result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
   
   result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
+  
+  result$se_x1[i] <- coef_df["x1","Std. Error"]
+  
+  result$se_x2[i] <- coef_df["x2","Std. Error"]
+  
+  result$se_x3[i] <- coef_df["x3","Std. Error"]
 
   result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
   
@@ -277,10 +296,13 @@ resid_sd <- 1
 result <- data.frame(acfs = rep(NA, n),
                      b1 = rep(NA,n),
                      p_x1 = rep(NA,n),
+                     se_x1 = rep(NA,n),
                      b2 = rep(NA,n),
                      p_x2 = rep(NA,n),
+                     se_x2 = rep(NA,n),
                      b3 = rep(NA,n),
                      p_x3 = rep(NA,n),
+                     se_x3 = rep(NA,n),
                      group_sd = rep(NA,n)
                      )
 
@@ -330,6 +352,12 @@ for(i in 1:500){
   result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
 
   result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
+  
+  result$se_x1[i] <- coef_df["x1","Std. Error"]
+  
+  result$se_x2[i] <- coef_df["x2","Std. Error"]
+  
+  result$se_x3[i] <- coef_df["x3","Std. Error"]
 
   result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
   
@@ -377,11 +405,14 @@ resid_sd <- 1
 result <- data.frame(acfs = rep(NA, n),
                      b1 = rep(NA,n),
                      p_x1 = rep(NA,n),
+                     se_x1 = rep(NA,n),
                      b2 = rep(NA,n),
                      p_x2 = rep(NA,n),
+                     se_x2 = rep(NA,n),
                      b3 = rep(NA,n),
                      p_x3 = rep(NA,n),
-                     re = rep(NA, n)
+                     se_x3 = rep(NA,n),
+                     re = rep(NA, n) # whether it has random effect
                      )
 
 
@@ -390,6 +421,7 @@ result <- data.frame(acfs = rep(NA, n),
 for(i in 1:500){
   
 # simulate data
+  
   sim_data <- data.frame(
     x1 = rnorm(n, mean = 0, sd = 1),
     x2 = rnorm(n, mean = 0, sd = 1),
@@ -404,7 +436,7 @@ for(i in 1:500){
 
 # model
   
-    if(i < n/5){
+    if(i < n/2){
     result$re[i] <- "random effect"
     
     model <- glmmTMB(response ~ x1 + x2 + x3 + (1 | re_group), data = sim_data)
@@ -431,6 +463,12 @@ for(i in 1:500){
   result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
 
   result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
+  
+  result$se_x1[i] <- coef_df["x1","Std. Error"]
+  
+  result$se_x2[i] <- coef_df["x2","Std. Error"]
+  
+  result$se_x3[i] <- coef_df["x3","Std. Error"]
 
   result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
   
@@ -458,7 +496,10 @@ b3 <- gf_boxplot(b3 ~ re, data = result)+
 
 slopes <- b1 + b2 + b3
 
-ggsave(filename = "figures/compare_slopes.png", plot = slopes, width = 9, height = 4, dpi = 300)
+slopes
+
+ggsave(filename = "../figures/compare_slopes.png", 
+       plot = slopes, width = 9, height = 4, dpi = 300)
 
 ```
 ```{r}
@@ -479,10 +520,37 @@ p3 <- gf_boxplot(p_x3 ~ re, data = result)+
   )
 
 p_val <- p1 + p2 + p3
-
-ggsave(filename = "figures/compare_pval.png", plot = p_val, width = 9, height = 4, dpi = 300)
+p_val
+ggsave(filename = "../figures/compare_pval.png", 
+       plot = p_val, width = 9, height = 4, dpi = 300)
 
 ```
+
+```{r}
+se_1 <- gf_boxplot(se_x1 ~ re,  data = result)+
+  theme(
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.background = element_rect(fill = "white", color = NA)  
+  )
+se_2 <- gf_boxplot(se_x2 ~ re, data = result)+
+  theme(
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.background = element_rect(fill = "white", color = NA)  
+  )
+se_3 <- gf_boxplot(se_x3 ~ re, data = result)+
+  theme(
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.background = element_rect(fill = "white", color = NA)  
+  )
+
+se <- se_1 + se_2 + se_3
+
+se
+
+ggsave(filename = "../figures/compare_se.png", plot = p_val, width = 9, height = 4, dpi = 300)
+
+```
+
 
 
 
