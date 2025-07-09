@@ -17,6 +17,7 @@ library(tidyverse)
 library(glmmTMB)
 library(ggformula)
 library(dplyr)
+library(patchwork)
 library(broom)
 library(ggformula)
 
@@ -108,6 +109,7 @@ result <- data.frame(acfs = rep(NA, n),
 # for loop
 
 for(i in 1:500){
+  
   sim_data <- data.frame(
     x1 = rnorm(n, mean = 0, sd = 1),
     x2 = rnorm(n, mean = 0, sd = 1),
@@ -141,8 +143,20 @@ for(i in 1:500){
   result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
 }
 
-glimpse(result)
 ```
+
+```{r}
+acf_hist <- gf_histogram(~acfs, data = result)|>
+  gf_labs(subtitle =  "frenquency of acfs at lag(1) for 500 simulated datasets and models") +
+  theme(
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.background = element_rect(fill = "white", color = NA)  
+  )
+
+ggsave(filename = "figures/acf_hist.png", plot = acf_hist, width = 6, height = 4, dpi = 300)
+  
+```
+
 
 # Different numbers of cases per random effect group
 
@@ -168,11 +182,11 @@ for(i in 1:n){
   } else if(i < 2*n/5){
     n_re <- 4
   } else if(i < 3*n/5){
-    n_re <- 6
-  } else if(i < 4*n/5){
     n_re <- 8
+  } else if(i < 4*n/5){
+    n_re <- 16
   } else {
-    n_re <- 10
+    n_re <- 32
   }
   
   sim_data <- data.frame(
@@ -209,8 +223,6 @@ for(i in 1:n){
   
   result$n_re[i] <- n_re
 }
-
-glimpse(result)
 ```
 
 ```{r}
@@ -219,19 +231,32 @@ result <- result |>
 ```
 
 ```{r}
-gf_histogram(~acfs|n_re, data = result)
+n_re_hist <- gf_histogram(~acfs|n_re, data = result)+
+  theme(
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.background = element_rect(fill = "white", color = NA)  
+  )
+
+ggsave(filename = "figures/n_re_hist.png", plot = n_re_hist, width = 6, height = 4, dpi = 300)
 ```
 
 
 ```{r}
-gf_boxplot(acfs ~ n_re, fill = ~n_re, data = result)|>
+n_re_box <- gf_boxplot(acfs ~ n_re, fill = ~n_re, data = result)|>
   gf_labs(x = "numbers of cases per random effect group",
-          y = "acf value of lag(1)")
+          y = "acf value of lag(1)")+
+  theme(
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.background = element_rect(fill = "white", color = NA)  
+  )
+
+ggsave(filename = "figures/n_re_box.png", plot = n_re_box, width = 6, height = 4, dpi = 300)
 ```
 
 # Vary random effect standard deviation
 
 ```{r}
+#| label: Vary random effect st dev.
 
 # simulation setting
 
@@ -312,21 +337,23 @@ for(i in 1:500){
   
 }
 
-glimpse(result)
-```
-
-```{r}
 result <- result |>
   mutate(group_sd = as.factor(group_sd))
 ```
 
 ```{r}
-gf_boxplot(acfs ~ group_sd, fill = ~group_sd, data = result)|>
+re_sd_box <- gf_boxplot(acfs ~ group_sd, fill = ~group_sd, data = result)|>
   gf_labs(x = "random effect standard deviation",
-          y = "acf value of lag(1)")
+          y = "acf value of lag(1)")+
+  theme(
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.background = element_rect(fill = "white", color = NA)  
+  )
+
+ggsave(filename = "figures/re_sd_box.png", plot = re_sd_box, width = 6, height = 4, dpi = 300)
 ```
 
-# model without the RE and store ACF lag 1, slopes, SEs, and p-values
+# Compare models with and without the RE
 
 ```{r}
 
@@ -411,15 +438,51 @@ for(i in 1:500){
 
 glimpse(result)
 ```
-```{r}
-result_pivot <- result |>
-  pivot_longer(cols = c("b1","p_x1","b2","p_x2","b3","p_x3"),
-               names_to = "ids",
-               values_to = "values")
-```
 
 ```{r}
-gf_boxplot(values ~ ids, fill = ~re, data = result_pivot)
+b1 <- gf_boxplot(b1 ~ re,  data = result)+
+  theme(
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.background = element_rect(fill = "white", color = NA)  
+  )
+b2 <- gf_boxplot(b2 ~ re, data = result)+
+  theme(
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.background = element_rect(fill = "white", color = NA)  
+  )
+b3 <- gf_boxplot(b3 ~ re, data = result)+
+  theme(
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.background = element_rect(fill = "white", color = NA)  
+  )
+
+slopes <- b1 + b2 + b3
+
+ggsave(filename = "figures/compare_slopes.png", plot = slopes, width = 9, height = 4, dpi = 300)
+
 ```
+```{r}
+p1 <- gf_boxplot(p_x1 ~ re,  data = result)+
+  theme(
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.background = element_rect(fill = "white", color = NA)  
+  )
+p2 <- gf_boxplot(p_x2 ~ re, data = result)+
+  theme(
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.background = element_rect(fill = "white", color = NA)  
+  )
+p3 <- gf_boxplot(p_x3 ~ re, data = result)+
+  theme(
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.background = element_rect(fill = "white", color = NA)  
+  )
+
+p_val <- p1 + p2 + p3
+
+ggsave(filename = "figures/compare_pval.png", plot = p_val, width = 9, height = 4, dpi = 300)
+
+```
+
 
 
