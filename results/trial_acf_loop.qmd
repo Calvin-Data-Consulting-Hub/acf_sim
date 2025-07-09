@@ -1,0 +1,399 @@
+---
+title: "trial acf stuff"
+format: pdf
+editor: source
+---
+
+### Setup
+```{r}
+#| label: setup
+#| include: false
+
+library(tidyverse)
+library(glmmTMB)
+library(ggformula)
+
+theme_set(theme_minimal(base_size = 12))
+
+knitr::opts_chunk$set(echo = TRUE,
+                      # change to true to cache results
+                      cache = FALSE)
+```
+
+```{r}
+# rows in sim dataset
+n <- 500
+# size of RE groups
+n_re <- 2
+# x1 slope
+b1 <- 1.5
+# x2 slope
+b2 <- -0.5
+# random intercept standard deviation
+group_sd <- 0.5
+# residual standard deviation
+resid_sd <- 1
+```
+
+### Standard Trial
+```{r}
+acf_values = data.frame(acfs = rep.int(NA, n)) # premade data frame of proper current length
+
+for (i in 1:n) {
+  sim_data <- data.frame(
+    # values of predictor #1
+    x1 = rnorm(n, mean = 0, sd = 1),
+    # values of predictor #2
+    x2 = rnorm(n, mean = 0, sd = 1),
+    # third candidate predictor that is NOT assoc w/respone
+    x3 = rnorm(n, mean = 0, sd = 1),
+    # random effect group assignment
+    re_group = gl(n = floor(n/2),
+                  k = n_re,
+                  length = n),
+    # residuals
+    resid = rnorm(n, mean = 0, sd = resid_sd)) |>
+    # random intercepts
+    group_by(re_group) |>
+    mutate(alpha = rnorm(1, mean = 0, sd = group_sd)) |>
+    ungroup() |>
+    mutate(response = 0 + alpha + b1 * x1 + b2 * x2 + resid) # note: response value does not include x3
+  
+    model <- glmmTMB(response ~ x1 + x2 + (1 | re_group), data = sim_data)
+    summary(model)
+    acf_out <- acf(resid(model), plot = FALSE)
+    acf_values$acfs[i] = acf_out$acf[acf_out$lag == 1] # send values at lag 1 to the premade data frame
+}
+```
+
+### Find number below the lower bound (needs work)
+```{r}
+acf_greater = list() # test list for being beyond the bound
+counter = 1
+for (i in 1:n) {
+  if(acf_values$acfs[i] <= -.1) { # the bound is currently set at -.1 based on my eyeballing it
+                                  # this will need to change as its actually based on sample size
+   acf_greater[counter] <- acf_values$acfs[i]
+   counter = counter + 1 # used because if you use i, it creates a lot of empty rows (I know this is kind of a janky setup)
+  }
+}
+```
+
+`x <- na.action(as.ts(x))`
+`x.freq <- frequency(x)`
+`x <- as.matrix(x)`
+`sampleT <- as.integer(nrow(x))`
+`nser <- as.integer(ncol(x))`
+
+`if (is.null(lag.max)) `
+        `lag.max <- floor(10 * (log10(sampleT) - log10(nser)))`
+    `lag.max <- as.integer(min(lag.max, sampleT - 1L))`
+    
+appears to be the way to calculate the bounds of the acf, though I'm not sure (found by typing `acf` into the console)
+
+seems like you need to make x a matrix, find the number of rows and columns, and then take the log10 of the numbers while doing some more math to them
+
+x is the thing you put into the `acf()` function, so the residuals of `model` in this case (`resid(model)`)
+
+### Trial without the RE 
+```{r}
+# without the RE
+
+result <- data.frame(acfs = rep(NA, n),
+                     b1 = rep(NA,n),
+                     se_x1 = rep(NA, n),
+                     p_x1 = rep(NA,n),
+                     b2 = rep(NA,n),
+                     se_x2 = rep(NA, n),
+                     p_x2 = rep(NA,n),
+                     b3 = rep(NA,n),
+                     se_x3 = rep(NA, n),
+                     p_x3 = rep(NA,n)
+)
+
+
+for (i in 1:n) {
+  sim_data <- data.frame(
+    x1 = rnorm(n, mean = 0, sd = 1),
+    x2 = rnorm(n, mean = 0, sd = 1),
+    x3 = rnorm(n, mean = 0, sd = 1),
+    resid = rnorm(n, mean = 0, sd = resid_sd)
+  ) |>
+    mutate(alpha = rnorm(1, mean = 0, sd = group_sd)) |>
+    ungroup() |>
+    mutate(response = 0 + alpha + b1 * x1 + b2 * x2 + resid)
+
+  model <- glmmTMB(response ~ x1 + x2 + x3, data = sim_data)
+
+  acf_out <- acf(resid(model), plot = FALSE)
+  
+  coef_df <- as.data.frame(summary(model)$coefficients$cond)
+  
+  result$b1[i] <- coef_df["x1", "Estimate"]
+  
+  result$b2[i] <- coef_df["x2", "Estimate"]
+  
+  result$b3[i] <- coef_df["x3", "Estimate"]
+  
+  result$p_x1[i] <- coef_df["x1", "Pr(>|z|)"]
+  
+  result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
+  
+  result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
+
+  result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
+  
+  result$se_x1[i] <- coef_df["x1", "Std. Error"]
+  
+  result$se_x2[i] <- coef_df["x2", "Std. Error"]
+  
+  result$se_x3[i] <- coef_df["x3", "Std. Error"]
+}
+```
+
+```{r}
+# ACF lag 1, slopes, SEs, and p-values
+glimpse(result)
+```
+
+```{r}
+# graphs without the RE
+
+gf_histogram(~acfs, data = result)
+
+gf_boxplot(~acfs, data = result)
+```
+
+### Random slopes
+```{r}
+# picking the slopes from a distribution, not just preset
+# I used a normal distribution with means of the original values and standard deviation of 1 to create the new slopes
+
+acf_random = data.frame(acfs = rep(NA, n), # premade data frame of proper current length
+                     b1 = rep(NA,n),
+                     p_x1 = rep(NA,n),
+                     b2 = rep(NA,n),
+                     p_x2 = rep(NA,n),
+                     b3 = rep(NA,n),
+                     p_x3 = rep(NA,n)
+                     ) 
+
+for (i in 1:n) {
+  sim_data <- data.frame(
+    # values of predictor #1
+    x1 = rnorm(n, mean = 0, sd = 1),
+    # values of predictor #2
+    x2 = rnorm(n, mean = 0, sd = 1),
+    # third candidate predictor that is NOT assoc w/respone
+    x3 = rnorm(n, mean = 0, sd = 1),
+    # random effect group assignment
+    b1 = rnorm(n, mean = 1.5, sd = 1),
+    b2 = rnorm(n, mean = -.5, sd = 1),
+    re_group = gl(n = floor(n/2),
+                  k = n_re,
+                  length = n),
+    # residuals
+    resid = rnorm(n, mean = 0, sd = resid_sd)) |>
+    # random intercepts
+    group_by(re_group) |>
+    mutate(alpha = rnorm(1, mean = 0, sd = group_sd)) |>
+    ungroup() |>
+    mutate(response = 0 + alpha + b1 * x1 + b2 * x2 + resid) # note: response value does not include x3
+  
+    model <- glmmTMB(response ~ x1 + x2 + (1 | re_group), data = sim_data)
+    summary(model)
+    acf_out <- acf(resid(model), plot = FALSE)
+    acf_random$acfs[i] = acf_out$acf[acf_out$lag == 1] # send values at lag 1 to the premade data frame
+}
+
+gf_histogram(~acfs, data = acf_random)
+gf_boxplot(~acfs, data = acf_random)
+
+```
+
+### Different Sizes of RE Group with RE vs. no RE
+```{r}
+
+# Preallocate result
+result <- data.frame(acfs = rep(NA, n),
+                     b1 = rep(NA, n),
+                     p_x1 = rep(NA, n),
+                     b2 = rep(NA, n),
+                     p_x2 = rep(NA, n),
+                     b3 = rep(NA, n),
+                     p_x3 = rep(NA, n),
+                     n_re = rep(NA, n),  # number of Random Effect Group
+                     re = rep(NA, n))
+
+# for loop
+
+for(i in 1:n){
+  
+  if(i < n/5){
+    n_re <- 2
+  } else if(i < 2*n/5){
+    n_re <- 4
+  } else if(i < 3*n/5){
+    n_re <- 8
+  } else if(i < 4*n/5){
+    n_re <- 16
+  } else {
+    n_re <- 32
+  }
+  
+  sim_data <- data.frame(
+    x1 = rnorm(n, mean = 0, sd = 1),
+    x2 = rnorm(n, mean = 0, sd = 1),
+    x3 = rnorm(n, mean = 0, sd = 1),
+    re_group = gl(n = floor(n / 2), k = n_re, length = n),
+    resid = rnorm(n, mean = 0, sd = resid_sd)
+  ) |>
+    group_by(re_group) |>
+    mutate(alpha = rnorm(1, mean = 0, sd = group_sd)) |>
+    ungroup() |>
+    mutate(response = 0 + alpha + b1 * x1 + b2 * x2 + resid)
+  
+  if(i%%2 == 0){
+    result$re[i] <- "random effect"
+    
+    model <- glmmTMB(response ~ x1 + x2 + x3 + (1 | re_group), data = sim_data)
+    
+  } else {
+    result$re[i] <- "no random effect"
+    
+    model <- glmmTMB(response ~ x1 + x2 + x3, data = sim_data)
+  }
+
+  acf_out <- acf(resid(model), plot = FALSE)
+  
+  coef_df <- as.data.frame(summary(model)$coefficients$cond)
+  
+  result$b1[i] <- coef_df["x1", "Estimate"]
+  
+  result$b2[i] <- coef_df["x2", "Estimate"]
+  
+  result$b3[i] <- coef_df["x3", "Estimate"]
+  
+  result$p_x1[i] <- coef_df["x1", "Pr(>|z|)"]
+  
+  result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
+  
+  result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
+
+  result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
+  
+  result$n_re[i] <- n_re
+}
+
+glimpse(result)
+```
+
+```{r}
+gf_boxplot(re ~ acfs | n_re, color = ~re, data = result) +
+  xlab('ACF Value at lag 1') +
+  ylab('Random Effect') +
+  labs(color = 'RE')
+
+```
+
+### Different Random Effect Standard Deviations with RE vs. no RE
+```{r}
+# simulation setting
+
+n <- 500 # rows in sim dataset
+
+n_re <- 2 # size of RE groups
+
+b1 <- 1.5 # x1 slope
+
+b2 <- -0.5 # x2 slope
+
+# random intercept standard deviation
+group_sd <- 0.5
+# residual standard deviation
+resid_sd <- 1
+
+# Preallocate result
+result <- data.frame(acfs = rep(NA, n),
+                     b1 = rep(NA, n),
+                     p_x1 = rep(NA, n),
+                     b2 = rep(NA, n),
+                     p_x2 = rep(NA, n),
+                     b3 = rep(NA, n),
+                     p_x3 = rep(NA, n),
+                     group_sd = rep(NA, n), 
+                     re = rep(NA, n)
+                     )
+
+# for loop
+
+for(i in 1:n){
+  
+  if(i < n/5){
+    group_sd <- 0.1
+    
+  } else if(i < 2*n/5){
+    group_sd <- 0.25
+  } else if(i < 3*n/5){
+    group_sd <- 1
+  } else if(i < 4*n/5){
+    group_sd <- 2
+  } else {
+    group_sd <- 4
+  }
+  
+  sim_data <- data.frame(
+    x1 = rnorm(n, mean = 0, sd = 1),
+    x2 = rnorm(n, mean = 0, sd = 1),
+    x3 = rnorm(n, mean = 0, sd = 1),
+    re_group = gl(n = floor(n / 2), k = n_re, length = n),
+    resid = rnorm(n, mean = 0, sd = resid_sd)
+  ) |>
+    group_by(re_group) |>
+    mutate(alpha = rnorm(1, mean = 0, sd = group_sd)) |>
+    ungroup() |>
+    mutate(response = 0 + alpha + b1 * x1 + b2 * x2 + resid)
+  
+  if(i%%2 == 0){
+    result$re[i] <- "random effect"
+    
+    model <- glmmTMB(response ~ x1 + x2 + x3 + (1 | re_group), data = sim_data)
+    
+  } else {
+    result$re[i] <- "no random effect"
+    
+    model <- glmmTMB(response ~ x1 + x2 + x3, data = sim_data)
+  }
+
+  acf_out <- acf(resid(model), plot = FALSE)
+
+  coef_df <- as.data.frame(summary(model)$coefficients$cond)
+
+  result$b1[i] <- coef_df["x1", "Estimate"]
+
+  result$b2[i] <- coef_df["x2", "Estimate"]
+
+  result$b3[i] <- coef_df["x3", "Estimate"]
+
+  result$p_x1[i] <- coef_df["x1", "Pr(>|z|)"]
+
+  result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
+
+  result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
+
+  result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
+  
+  result$group_sd[i] <- group_sd
+  
+}
+```
+
+```{r}
+gf_boxplot(re ~ acfs | group_sd, color = ~re, data = result) +
+  xlab('ACF Value at lag 1') +
+  ylab('Random Effect') +
+  labs(color = 'RE')
+```
+
+
+
