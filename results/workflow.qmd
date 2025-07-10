@@ -26,6 +26,9 @@ theme_set(theme_minimal(base_size = 12))
 knitr::opts_chunk$set(echo = TRUE,
                       # change to true to cache results
                       cache = FALSE)
+
+# knitr::opts_chunk$set(dev = c('pdf','png'),
+#                       fig.path = 'figures/results')
 ```
 
 
@@ -250,7 +253,7 @@ result <- result |>
 ```
 
 ```{r}
-n_re_hist <- gf_histogram(~acfs|n_re, data = result)+
+n_re_histo <- gf_histogram(~acfs|n_re, data = result)+
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
     panel.background = element_rect(fill = "white", color = NA)  
@@ -478,17 +481,21 @@ glimpse(result)
 ```
 
 ```{r}
-b1 <- gf_boxplot(b1 ~ re,  data = result)+
+b1 <- gf_boxplot(b1 ~ re,  data = result)|>
+  gf_labs(x = "",
+          title = "Compare slopes of models with and without random intercept")+
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
     panel.background = element_rect(fill = "white", color = NA)  
   )
-b2 <- gf_boxplot(b2 ~ re, data = result)+
+b2 <- gf_boxplot(b2 ~ re, data = result)|>
+  gf_labs(x = "")+
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
     panel.background = element_rect(fill = "white", color = NA)  
   )
-b3 <- gf_boxplot(b3 ~ re, data = result)+
+b3 <- gf_boxplot(b3 ~ re, data = result)|>
+  gf_labs(x = "")+
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
     panel.background = element_rect(fill = "white", color = NA)  
@@ -496,24 +503,32 @@ b3 <- gf_boxplot(b3 ~ re, data = result)+
 
 slopes <- b1 + b2 + b3
 
+
 slopes
 
-ggsave(filename = "../figures/compare_slopes.png", 
+ggsave(filename = "figures/compare_slopes.png", 
        plot = slopes, width = 9, height = 4, dpi = 300)
 
 ```
 ```{r}
-p1 <- gf_boxplot(p_x1 ~ re,  data = result)+
+p1 <- gf_boxplot(p_x1 ~ re,  data = result)|>
+  gf_labs(x = "", 
+          y = "p value for x1",
+          title = "Compare p values of models with and without random intercept") +
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
     panel.background = element_rect(fill = "white", color = NA)  
   )
-p2 <- gf_boxplot(p_x2 ~ re, data = result)+
+p2 <- gf_boxplot(p_x2 ~ re, data = result)|>
+  gf_labs(x = "", 
+          y = "p value for x2")+
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
     panel.background = element_rect(fill = "white", color = NA)  
   )
-p3 <- gf_boxplot(p_x3 ~ re, data = result)+
+p3 <- gf_boxplot(p_x3 ~ re, data = result)|>
+  gf_labs(x = "", 
+          y = "p value for x3")+
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
     panel.background = element_rect(fill = "white", color = NA)  
@@ -521,23 +536,30 @@ p3 <- gf_boxplot(p_x3 ~ re, data = result)+
 
 p_val <- p1 + p2 + p3
 p_val
-ggsave(filename = "../figures/compare_pval.png", 
+ggsave(filename = "figures/compare_pval.png", 
        plot = p_val, width = 9, height = 4, dpi = 300)
 
 ```
 
 ```{r}
-se_1 <- gf_boxplot(se_x1 ~ re,  data = result)+
+se_1 <- gf_boxplot(se_x1 ~ re,  data = result)|>
+  gf_labs(x = "", 
+          y = "Standard Error Value for x1",
+          title = "Compare standard error of models with and without random intercept")+
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
     panel.background = element_rect(fill = "white", color = NA)  
   )
-se_2 <- gf_boxplot(se_x2 ~ re, data = result)+
+se_2 <- gf_boxplot(se_x2 ~ re, data = result)|>
+  gf_labs(x = "", 
+          y = "Standard Error Value for x2")+
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
     panel.background = element_rect(fill = "white", color = NA)  
   )
-se_3 <- gf_boxplot(se_x3 ~ re, data = result)+
+se_3 <- gf_boxplot(se_x3 ~ re, data = result)|>
+  gf_labs(x = "", 
+          y = "Standard Error Value for x3")+
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
     panel.background = element_rect(fill = "white", color = NA)  
@@ -547,7 +569,7 @@ se <- se_1 + se_2 + se_3
 
 se
 
-ggsave(filename = "../figures/compare_se.png", plot = p_val, width = 9, height = 4, dpi = 300)
+ggsave(filename = "figures/compare_se.png", plot = se, width = 9, height = 4, dpi = 300)
 
 ```
 
