@@ -43,7 +43,17 @@ resid_sd <- 1
 ```{r}
 #| label: standard-trial
 
-acf_values = data.frame(acfs = rep.int(NA, n)) # premade data frame of proper current length
+result <- data.frame(acfs = rep(NA, n),
+                     b1 = rep(NA,n),
+                     se_x1 = rep(NA, n),
+                     p_x1 = rep(NA,n),
+                     b2 = rep(NA,n),
+                     se_x2 = rep(NA, n),
+                     p_x2 = rep(NA,n),
+                     b3 = rep(NA,n),
+                     se_x3 = rep(NA, n),
+                     p_x3 = rep(NA,n)
+)
 
 for (i in 1:n) {
   sim_data <- data.frame(
@@ -68,40 +78,39 @@ for (i in 1:n) {
     model <- glmmTMB(response ~ x1 + x2 + (1 | re_group), data = sim_data)
     summary(model)
     acf_out <- acf(resid(model), plot = FALSE)
-    acf_values$acfs[i] = acf_out$acf[acf_out$lag == 1] # send values at lag 1 to the premade data frame
+    
+    coef_df <- as.data.frame(summary(model)$coefficients$cond)
+    
+  result$b1[i] <- coef_df["x1", "Estimate"]
+  
+  result$b2[i] <- coef_df["x2", "Estimate"]
+  
+  result$b3[i] <- coef_df["x3", "Estimate"]
+  
+  result$p_x1[i] <- coef_df["x1", "Pr(>|z|)"]
+  
+  result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
+  
+  result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
+
+  result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
+  
+  result$se_x1[i] <- coef_df["x1", "Std. Error"]
+  
+  result$se_x2[i] <- coef_df["x2", "Std. Error"]
+  
+  result$se_x3[i] <- coef_df["x3", "Std. Error"]
 }
 ```
 
-### Find number below the lower bound (needs work)
+### Find amount below the lower bound
 ```{r}
 #| label: below-bound
 
-acf_greater = list() # test list for being beyond the bound
-counter = 1
-for (i in 1:n) {
-  if(acf_values$acfs[i] <= -.1) { # the bound is currently set at -.1 based on my eyeballing it
-                                  # this will need to change as its actually based on sample size
-   acf_greater[counter] <- acf_values$acfs[i]
-   counter = counter + 1 # used because if you use i, it creates a lot of empty rows (I know this is kind of a janky setup)
-  }
-}
+acf_lesser <- result |>
+  filter(acfs <= -(qnorm(1.95/2)/sqrt(nrow(result))))
+
 ```
-
-`x <- na.action(as.ts(x))`
-`x.freq <- frequency(x)`
-`x <- as.matrix(x)`
-`sampleT <- as.integer(nrow(x))`
-`nser <- as.integer(ncol(x))`
-
-`if (is.null(lag.max)) `
-        `lag.max <- floor(10 * (log10(sampleT) - log10(nser)))`
-    `lag.max <- as.integer(min(lag.max, sampleT - 1L))`
-    
-appears to be the way to calculate the bounds of the acf, though I'm not sure (found by typing `acf` into the console)
-
-seems like you need to make x a matrix, find the number of rows and columns, and then take the log10 of the numbers while doing some more math to them
-
-x is the thing you put into the `acf()` function, so the residuals of `model` in this case (`resid(model)`)
 
 ### Trial without the RE 
 ```{r}
