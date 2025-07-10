@@ -9,15 +9,19 @@ editor: source
 #| label: setup
 #| include: false
 
+knitr::opts_chunk$set(dev = 'png', 
+                      dpi = 300, 
+                      fig.path = 'results/figures')
+
+knitr::opts_chunk$set(echo = TRUE,
+                      # change to true to cache results
+                      cache = FALSE)
+
 library(tidyverse)
 library(glmmTMB)
 library(ggformula)
 
 theme_set(theme_minimal(base_size = 12))
-
-knitr::opts_chunk$set(echo = TRUE,
-                      # change to true to cache results
-                      cache = FALSE)
 ```
 
 ```{r}
@@ -37,6 +41,8 @@ resid_sd <- 1
 
 ### Standard Trial
 ```{r}
+#| label: standard-trial
+
 acf_values = data.frame(acfs = rep.int(NA, n)) # premade data frame of proper current length
 
 for (i in 1:n) {
@@ -68,6 +74,8 @@ for (i in 1:n) {
 
 ### Find number below the lower bound (needs work)
 ```{r}
+#| label: below-bound
+
 acf_greater = list() # test list for being beyond the bound
 counter = 1
 for (i in 1:n) {
@@ -97,7 +105,7 @@ x is the thing you put into the `acf()` function, so the residuals of `model` in
 
 ### Trial without the RE 
 ```{r}
-# without the RE
+#| label: without-RE
 
 result <- data.frame(acfs = rep(NA, n),
                      b1 = rep(NA,n),
@@ -157,7 +165,7 @@ glimpse(result)
 ```
 
 ```{r}
-# graphs without the RE
+#| label: graphs-no-RE
 
 gf_histogram(~acfs, data = result)
 
@@ -166,6 +174,8 @@ gf_boxplot(~acfs, data = result)
 
 ### Random slopes
 ```{r}
+#| label: random-slopes
+
 # picking the slopes from a distribution, not just preset
 # I used a normal distribution with means of the original values and standard deviation of 1 to create the new slopes
 
@@ -213,6 +223,7 @@ gf_boxplot(~acfs, data = acf_random)
 
 ### Different Sizes of RE Group with RE vs. no RE
 ```{r}
+#| label: different-sized-groups-with-without-RE
 
 # Preallocate result
 result <- data.frame(acfs = rep(NA, n),
@@ -289,6 +300,8 @@ glimpse(result)
 ```
 
 ```{r}
+#| label: graph-groups-with-without-RE
+
 gf_boxplot(re ~ acfs | n_re, color = ~re, data = result) +
   xlab('ACF Value at lag 1') +
   ylab('Random Effect') +
@@ -298,6 +311,8 @@ gf_boxplot(re ~ acfs | n_re, color = ~re, data = result) +
 
 ### Different Random Effect Standard Deviations with RE vs. no RE
 ```{r}
+#| label: different-SD-with-without-RE
+
 # simulation setting
 
 n <- 500 # rows in sim dataset
@@ -389,6 +404,8 @@ for(i in 1:n){
 ```
 
 ```{r}
+#| label: graph-sd-with-without-RE
+
 gf_boxplot(re ~ acfs | group_sd, color = ~re, data = result) +
   xlab('ACF Value at lag 1') +
   ylab('Random Effect') +
