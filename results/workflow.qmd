@@ -27,6 +27,8 @@ knitr::opts_chunk$set(echo = TRUE,
                       # change to true to cache results
                       cache = FALSE)
 
+
+# # for some reason I couldn't figure out how this work?
 # knitr::opts_chunk$set(dev = c('pdf','png'),
 #                       fig.path = 'figures/results')
 ```
@@ -39,18 +41,38 @@ $$
 $$
 \epsilon \sim N(0, 1)
 $$
+## Function that will be used later
+```{r, function}
+# a function that will get the coefitiant table from the model and 
+# pivot the coeficient table into a single row.
+
+pivot_coef_table <- function(model) {
+# get the coefisient table from the model and turn it to a data frame
+  coef_df <- as.data.frame(summary(model)$coefficients$cond)
+# add the name "term" which will enable pivot to work
+  coef_table <- tibble::rownames_to_column(coef_df, var = "term")
+# coefitient table pivot into a single row
+coef_table_wide <- coef_table |>
+  pivot_longer(cols = -term, names_to = "label", values_to = "value") |>
+  mutate(name = paste0(term, "_", label))|>
+  select(name, value) |>
+  pivot_wider(names_from = name, values_from = value)
+
+return (coef_table_wide)
+}
+```
 
 ## Test cases
 
-
 ```{r}
 #| eval: false
-#| label: test case
 
 # rows in sim dataset
 n <- 500
-# size of RE groups
-n_re <- 2
+# size of the re group - number of observations in a random effect group
+re_size <- 2
+# number of RE groups
+n_re <- floor(n/re_size)
 # x1 slope
 b1 <- 1.5
 # x2 slope
@@ -64,7 +86,7 @@ sim_data <- data.frame(
     x1 = rnorm(n, mean = 0, sd = 1),
     x2 = rnorm(n, mean = 0, sd = 1),
     x3 = rnorm(n, mean = 0, sd = 1),
-    re_group = gl(n = floor(n / 2), k = n_re, length = n),
+    re_group = gl(n = re_size, k = n_re, length = n),
     resid = rnorm(n, mean = 0, sd = resid_sd)
   ) |>
     group_by(re_group) |>
@@ -74,85 +96,101 @@ sim_data <- data.frame(
 
   model <- glmmTMB(response ~ x1 + x2 + x3 + (1 | re_group), data = sim_data)
 
-  coef_df <- as.data.frame(summary(model)$coefficients$cond)
-  glimpse(coef_df)
+  coef_wide <- pivot_coef_table(model)
+  # coef_wide$row_index <- 1
+  # glimpse(coef_wide)
+  # summary(model)
+  # acf(resid(model))
+  
+  # this line below is needed in the later work because it defines the colomn names
+  coef_wide_names <- names(coef_wide)
 ```
+
+# work
 
 
 ```{r}
 
 #| eval: false
-#| label: n_re = 2
+#| label: test_case
 
-# simulation setting
 
-n <- 500 # rows in sim dataset
+# Preallocate result
 
-n_re <- 2 # size of RE groups
+result <- expand.grid(
+  # number of cases in random effect group
+  re_size = c(2,3,4),
+  # group_sd = random intercept standard deviation (eventually want to add 1,2,4)
+  group_sd = c(0.1, 0.25,0.5),
+
+  # for now 100 iteration for each setting,
+
+  iteration = 1:100)
+
+
+result<- result |>
+  mutate(row_index = row_number())
+
+for (item in coef_wide_names) {
+  result[[item]] <- NA}
+
+```
+
+```{r}
+# simulation setting that stays constant
 
 b1 <- 1.5 # x1 slope
 
 b2 <- -0.5 # x2 slope
 
-# random intercept standard deviation
-group_sd <- 0.5
 # residual standard deviation
 resid_sd <- 1
+```
 
-# Preallocate result
-result <- data.frame(acfs = rep(NA, n),
-                     b1 = rep(NA,n),
-                     p_x1 = rep(NA,n),
-                     se_x1 = rep(NA,n),
-                     b2 = rep(NA,n),
-                     p_x2 = rep(NA,n),
-                     se_x1 = rep(NA,n),
-                     b3 = rep(NA,n),
-                     p_x3 = rep(NA,n),
-                     se_x1 = rep(NA,n),
-                     )
-
+```{r}
 # for loop
 
-for(i in 1:500){
+for(i in 1:nrow(result)){
+  # number of observations in a random effect group
+  re_size <- result$re_size[i]
+  
+  # rows in sim dataset 
+  # fluctuate according to how many number of observations are in a re group
+  # such that there's consistent number of groups.
+  n <- 100 * re_size
+  
+  # number of RE groups
+  n_re <- floor(n/re_size)
   
   sim_data <- data.frame(
+    
     x1 = rnorm(n, mean = 0, sd = 1),
     x2 = rnorm(n, mean = 0, sd = 1),
     x3 = rnorm(n, mean = 0, sd = 1),
-    re_group = gl(n = floor(n / 2), k = n_re, length = n),
+    
+    # I think the next line has problems, but I don't know how to change it.
+    
+    re_group = gl(n = n_re, k = re_size, length = n),
+    
     resid = rnorm(n, mean = 0, sd = resid_sd)
   ) |>
     group_by(re_group) |>
     mutate(alpha = rnorm(1, mean = 0, sd = group_sd)) |>
     ungroup() |>
     mutate(response = 0 + alpha + b1 * x1 + b2 * x2 + resid)
-
-  model <- glmmTMB(response ~ x1 + x2 + x3 + (1 | re_group), data = sim_data)
+  
+  model <- glmmTMB(response  ~ x1 + x2 + x3 + (1 | re_group), data = sim_data)
 
   acf_out <- acf(resid(model), plot = FALSE)
-
-  coef_df <- as.data.frame(summary(model)$coefficients$cond)
-
-  result$b1[i] <- coef_df["x1", "Estimate"]
-
-  result$b2[i] <- coef_df["x2", "Estimate"]
-
-  result$b3[i] <- coef_df["x3", "Estimate"]
-
-  result$p_x1[i] <- coef_df["x1", "Pr(>|z|)"]
-
-  result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
-
-  result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
   
-  result$se_x1[i] <- coef_df["x1","Std. Error"]
-  
-  result$se_x2[i] <- coef_df["x2","Std. Error"]
-  
-  result$se_x3[i] <- coef_df["x3","Std. Error"]
-
   result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
+  
+  # apply function to get coeficient table in wide format from model
+  coef_wide <- pivot_coef_table(model)
+  
+  for (col in coef_wide_names) {
+    result[[col]][i] <- coef_wide[[col]]
+  }
 }
 
 ```
@@ -161,230 +199,114 @@ for(i in 1:500){
 #| eval: false
 
 acf_hist <- gf_histogram(~acfs, data = result)|>
-  gf_labs(subtitle =  "frenquency of acfs at lag(1) for 500 simulated datasets and models") +
+  gf_labs(subtitle =  "frenquency of acfs at lag(1) for 700 simulated datasets and models") +
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
     panel.background = element_rect(fill = "white", color = NA)  
   )
 
-ggsave(filename = "figures/acf_hist.png", plot = acf_hist, width = 6, height = 4, dpi = 300)
+acf_hist
+# ggsave(filename = "figures/acf_hist.png", plot = acf_hist, width = 6, height = 4, dpi = 300)
   
 ```
 
-# Different numbers of cases per random effect group
-
 ```{r}
+re_size_hist <- gf_histogram(~acfs|re_size, data = result)+
+  theme(
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.background = element_rect(fill = "white", color = NA)  
+  )
+re_size_hist
 
-# Preallocate result
-result <- data.frame(acfs = rep(NA, n),
-                     b1 = rep(NA,n),
-                     p_x1 = rep(NA,n),
-                     se_x1 = rep(NA,n),
-                     b2 = rep(NA,n),
-                     p_x2 = rep(NA,n),
-                     se_x2 = rep(NA,n),
-                     b3 = rep(NA,n),
-                     p_x3 = rep(NA,n),
-                     se_x3 = rep(NA,n),
-                     n_re = rep(NA,n)  # number of Random Effect Group
-                     )
-
-# for loop
-
-for(i in 1:n){
-  
-  if(i < n/5){
-    n_re <- 2
-  } else if(i < 2*n/5){
-    n_re <- 4
-  } else if(i < 3*n/5){
-    n_re <- 8
-  } else if(i < 4*n/5){
-    n_re <- 16
-  } else {
-    n_re <- 32
-  }
-  
-  sim_data <- data.frame(
-    x1 = rnorm(n, mean = 0, sd = 1),
-    x2 = rnorm(n, mean = 0, sd = 1),
-    x3 = rnorm(n, mean = 0, sd = 1),
-    re_group = gl(n = floor(n / 2), k = n_re, length = n),
-    resid = rnorm(n, mean = 0, sd = resid_sd)
-  ) |>
-    group_by(re_group) |>
-    mutate(alpha = rnorm(1, mean = 0, sd = group_sd)) |>
-    ungroup() |>
-    mutate(response = 0 + alpha + b1 * x1 + b2 * x2 + resid)
-
-  model <- glmmTMB(response ~ x1 + x2 + x3 + (1 | re_group), data = sim_data)
-
-  acf_out <- acf(resid(model), plot = FALSE)
-  
-  coef_df <- as.data.frame(summary(model)$coefficients$cond)
-  
-  result$b1[i] <- coef_df["x1", "Estimate"]
-  
-  result$b2[i] <- coef_df["x2", "Estimate"]
-  
-  result$b3[i] <- coef_df["x3", "Estimate"]
-  
-  result$p_x1[i] <- coef_df["x1", "Pr(>|z|)"]
-  
-  result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
-  
-  result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
-  
-  result$se_x1[i] <- coef_df["x1","Std. Error"]
-  
-  result$se_x2[i] <- coef_df["x2","Std. Error"]
-  
-  result$se_x3[i] <- coef_df["x3","Std. Error"]
-
-  result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
-  
-  result$n_re[i] <- n_re
-}
 ```
 
 ```{r}
 result <- result |>
-  mutate(n_re = as.factor(n_re))
+  mutate(re_size = as.factor(re_size))
 ```
 
 ```{r}
-n_re_histo <- gf_histogram(~acfs|n_re, data = result)+
+result <- result |>
+  mutate(condition = paste0("re", re_size, "_sd", group_sd))
+```
+
+```{r}
+ci_data <- tibble(
+  re_size = c(2, 3, 4),
+  n = re_size * 100,
+  ci = 1.96 / sqrt(n)
+)
+ci_data <- ci_data |> 
+  mutate(xmin = as.numeric(factor(re_size)) - 0.5,
+         xmax = as.numeric(factor(re_size)) + 0.5)
+
+```
+```{r}
+n_re_graph <- gf_violin(acfs ~ re_size, fill = ~factor(re_size), data = result, alpha = 0.3) |>
+  gf_segment(
+  data = ci_data,
+  x = ~xmin, xend = ~xmax,
+  y = ~-ci, yend = ~-ci,
+  linetype = "dotted",
+  color = "red"
+)|>
+  gf_labs(
+    x = "Number of cases per random effect group",
+    y = "ACF value of lag(1)"
+  ) +
   theme(
-    plot.background = element_rect(fill = "white", color = NA), 
-    panel.background = element_rect(fill = "white", color = NA)  
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
   )
 
-ggsave(filename = "figures/n_re_hist.png", plot = n_re_hist, width = 6, height = 4, dpi = 300)
+n_re_graph
 ```
+
+```{r}
+n_re_graph <- gf_boxplot(acfs ~ re_size, fill = ~factor(re_size), data = result, alpha = 0.3)|>
+  gf_segment(
+  data = ci_data,
+  x = ~xmin, xend = ~xmax,
+  y = ~-ci, yend = ~-ci,
+  linetype = "dotted",
+  color = "red"
+)|>
+  gf_labs(
+    x = "Number of cases per random effect group",
+    y = "ACF value of lag(1)"
+  ) +
+  theme(
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
+  )
+
+n_re_graph
+
+```
+The red dotted line represent the lower bound of CI. 
+
+I think this result is a bit wierd, as it is opposite of what we expected. Is there anything wrong with my code? 
 
 
 ```{r}
-n_re_box <- gf_boxplot(acfs ~ n_re, fill = ~n_re, data = result)|>
+result <- result |>
+  mutate(re_size = as.factor(re_size))
+
+n_re_box <- gf_boxplot(acfs ~ condition, fill = ~re_size,  data = result)|>
+
   gf_labs(x = "numbers of cases per random effect group",
           y = "acf value of lag(1)")+
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
-    panel.background = element_rect(fill = "white", color = NA)  
+    panel.background = element_rect(fill = "white", color = NA),
+    axis.text.x = element_text(angle = 45, hjust = 1)
   )
-
-ggsave(filename = "figures/n_re_box.png", plot = n_re_box, width = 6, height = 4, dpi = 300)
-```
-
-# Vary random effect standard deviation
-
-```{r}
-#| label: Vary random effect st dev.
-
-# simulation setting
-
-n <- 500 # rows in sim dataset
-
-n_re <- 2 # size of RE groups
-
-b1 <- 1.5 # x1 slope
-
-b2 <- -0.5 # x2 slope
-
-# random intercept standard deviation
-group_sd <- 0.5
-# residual standard deviation
-resid_sd <- 1
-
-# Preallocate result
-result <- data.frame(acfs = rep(NA, n),
-                     b1 = rep(NA,n),
-                     p_x1 = rep(NA,n),
-                     se_x1 = rep(NA,n),
-                     b2 = rep(NA,n),
-                     p_x2 = rep(NA,n),
-                     se_x2 = rep(NA,n),
-                     b3 = rep(NA,n),
-                     p_x3 = rep(NA,n),
-                     se_x3 = rep(NA,n),
-                     group_sd = rep(NA,n)
-                     )
-
-# for loop
-
-for(i in 1:500){
-  
-  if(i < n/5){
-    group_sd <- 0.1
-    
-  } else if(i < 2*n/5){
-    group_sd <- 0.25
-  } else if(i < 3*n/5){
-    group_sd <- 1
-  } else if(i < 4*n/5){
-    group_sd <- 2
-  } else {
-    group_sd <- 4
-  }
-  
-  sim_data <- data.frame(
-    x1 = rnorm(n, mean = 0, sd = 1),
-    x2 = rnorm(n, mean = 0, sd = 1),
-    x3 = rnorm(n, mean = 0, sd = 1),
-    re_group = gl(n = floor(n / 2), k = n_re, length = n),
-    resid = rnorm(n, mean = 0, sd = resid_sd)
-  ) |>
-    group_by(re_group) |>
-    mutate(alpha = rnorm(1, mean = 0, sd = group_sd)) |>
-    ungroup() |>
-    mutate(response = 0 + alpha + b1 * x1 + b2 * x2 + resid)
-
-  model <- glmmTMB(response ~ x1 + x2 + x3 + (1 | re_group), data = sim_data)
-
-  acf_out <- acf(resid(model), plot = FALSE)
-
-  coef_df <- as.data.frame(summary(model)$coefficients$cond)
-
-  result$b1[i] <- coef_df["x1", "Estimate"]
-
-  result$b2[i] <- coef_df["x2", "Estimate"]
-
-  result$b3[i] <- coef_df["x3", "Estimate"]
-
-  result$p_x1[i] <- coef_df["x1", "Pr(>|z|)"]
-
-  result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
-
-  result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
-  
-  result$se_x1[i] <- coef_df["x1","Std. Error"]
-  
-  result$se_x2[i] <- coef_df["x2","Std. Error"]
-  
-  result$se_x3[i] <- coef_df["x3","Std. Error"]
-
-  result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
-  
-  result$group_sd[i] <- group_sd
-  
-}
-
-result <- result |>
-  mutate(group_sd = as.factor(group_sd))
-```
-
-```{r}
-re_sd_box <- gf_boxplot(acfs ~ group_sd, fill = ~group_sd, data = result)|>
-  gf_labs(x = "random effect standard deviation",
-          y = "acf value of lag(1)")+
-  theme(
-    plot.background = element_rect(fill = "white", color = NA), 
-    panel.background = element_rect(fill = "white", color = NA)  
-  )
-
-ggsave(filename = "figures/re_sd_box.png", plot = re_sd_box, width = 6, height = 4, dpi = 300)
+n_re_box
 ```
 
 # Compare models with and without the RE
+
+The work below I haven't been able to revise it. 
 
 ```{r}
 
