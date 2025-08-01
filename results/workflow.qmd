@@ -70,9 +70,9 @@ return (coef_table_wide)
 # rows in sim dataset
 n <- 500
 # size of the re group - number of observations in a random effect group
-re_size <- 2
+n_re <- 2
 # number of RE groups
-n_re <- floor(n/re_size)
+n_group <- floor(n/n_re)
 # x1 slope
 b1 <- 1.5
 # x2 slope
@@ -86,7 +86,7 @@ sim_data <- data.frame(
     x1 = rnorm(n, mean = 0, sd = 1),
     x2 = rnorm(n, mean = 0, sd = 1),
     x3 = rnorm(n, mean = 0, sd = 1),
-    re_group = gl(n = re_size, k = n_re, length = n),
+    re_group = gl(n = n_group, k = n_re, length = n),
     resid = rnorm(n, mean = 0, sd = resid_sd)
   ) |>
     group_by(re_group) |>
@@ -100,32 +100,31 @@ sim_data <- data.frame(
   # coef_wide$row_index <- 1
   # glimpse(coef_wide)
   # summary(model)
-  # acf(resid(model))
+  acf(resid(model))
   
   # this line below is needed in the later work because it defines the colomn names
   coef_wide_names <- names(coef_wide)
 ```
 
-# work
+# Random Effect Simulation with different RE size and group SD
 
 
 ```{r}
 
 #| eval: false
-#| label: test_case
 
 
 # Preallocate result
 
 result <- expand.grid(
   # number of cases in random effect group
-  re_size = c(2,3,4),
+  n_re = c(2,3,4),
   # group_sd = random intercept standard deviation (eventually want to add 1,2,4)
-  group_sd = c(0.1, 0.25,0.5),
+  group_sd = c(0.1, 0.25,0.5,1),
 
-  # for now 100 iteration for each setting,
+  # for now 200 iteration for each setting,
 
-  iteration = 1:100)
+  iteration = 1:200)
 
 
 result<- result |>
@@ -152,15 +151,15 @@ resid_sd <- 1
 
 for(i in 1:nrow(result)){
   # number of observations in a random effect group
-  re_size <- result$re_size[i]
+  n_re <- result$n_re[i]
   
   # rows in sim dataset 
   # fluctuate according to how many number of observations are in a re group
   # such that there's consistent number of groups.
-  n <- 100 * re_size
+  n <- 500 * n_re
   
   # number of RE groups
-  n_re <- floor(n/re_size)
+  n_group <- floor(n/n_re)
   
   sim_data <- data.frame(
     
@@ -170,7 +169,7 @@ for(i in 1:nrow(result)){
     
     # I think the next line has problems, but I don't know how to change it.
     
-    re_group = gl(n = n_re, k = re_size, length = n),
+    re_group = gl(n = n_group, k = n_re, length = n),
     
     resid = rnorm(n, mean = 0, sd = resid_sd)
   ) |>
@@ -194,12 +193,12 @@ for(i in 1:nrow(result)){
 }
 
 ```
-
+This loop took 2 hours to run. 
 ```{r}
 #| eval: false
 
 acf_hist <- gf_histogram(~acfs, data = result)|>
-  gf_labs(subtitle =  "frenquency of acfs at lag(1) for 700 simulated datasets and models") +
+  gf_labs(subtitle =  "frenquency of acfs at lag(1)") +
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
     panel.background = element_rect(fill = "white", color = NA)  
@@ -211,38 +210,36 @@ acf_hist
 ```
 
 ```{r}
-re_size_hist <- gf_histogram(~acfs|re_size, data = result)+
+n_re_hist <- gf_histogram(~acfs|n_re, data = result)+
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
     panel.background = element_rect(fill = "white", color = NA)  
   )
-re_size_hist
+n_re_hist
 
 ```
 
 ```{r}
-result <- result |>
-  mutate(re_size = as.factor(re_size))
-```
-
-```{r}
-result <- result |>
-  mutate(condition = paste0("re", re_size, "_sd", group_sd))
+graph_result <- result |>
+  mutate(n_re = as.factor(n_re),
+         condition = paste0("re", n_re, "_sd", group_sd))
 ```
 
 ```{r}
 ci_data <- tibble(
-  re_size = c(2, 3, 4),
-  n = re_size * 100,
+  n_re = c(2, 3, 4),
+  n = n_re * 500,
   ci = 1.96 / sqrt(n)
 )
 ci_data <- ci_data |> 
-  mutate(xmin = as.numeric(factor(re_size)) - 0.5,
-         xmax = as.numeric(factor(re_size)) + 0.5)
+  mutate(xmin = as.numeric(factor(n_re)) - 0.5,
+         xmax = as.numeric(factor(n_re)) + 0.5)
 
 ```
 ```{r}
-n_re_graph <- gf_violin(acfs ~ re_size, fill = ~factor(re_size), data = result, alpha = 0.3) |>
+n_group_graph <- gf_violin(acfs ~ n_re, 
+                           fill = ~factor(n_re), 
+                           data = graph_result, alpha = 0.3) |>
   gf_segment(
   data = ci_data,
   x = ~xmin, xend = ~xmax,
@@ -259,11 +256,13 @@ n_re_graph <- gf_violin(acfs ~ re_size, fill = ~factor(re_size), data = result, 
     panel.background = element_rect(fill = "white", color = NA)
   )
 
-n_re_graph
+n_group_graph
 ```
 
 ```{r}
-n_re_graph <- gf_boxplot(acfs ~ re_size, fill = ~factor(re_size), data = result, alpha = 0.3)|>
+n_group_graph <- gf_boxplot(acfs ~ n_re, 
+                            fill = ~factor(n_re), 
+                            data = graph_result, alpha = 0.3)|>
   gf_segment(
   data = ci_data,
   x = ~xmin, xend = ~xmax,
@@ -280,20 +279,22 @@ n_re_graph <- gf_boxplot(acfs ~ re_size, fill = ~factor(re_size), data = result,
     panel.background = element_rect(fill = "white", color = NA)
   )
 
-n_re_graph
+n_group_graph
 
 ```
 The red dotted line represent the lower bound of CI. 
 
-I think this result is a bit wierd, as it is opposite of what we expected. Is there anything wrong with my code? 
+I think this is a bit wierd, as it is opposite of what we expected. Is there anything wrong with my code? 
 
+Also it's a little odd that the p value for x1 are always 0 in the result dataset, but I couldn't figure out what caused it.
 
 ```{r}
-result <- result |>
-  mutate(re_size = as.factor(re_size))
+graph_result <- graph_result |>
+  mutate(n_re = as.factor(n_re))
 
-n_re_box <- gf_boxplot(acfs ~ condition, fill = ~re_size,  data = result)|>
-
+n_group_box <- gf_boxplot(acfs ~ condition, 
+                          fill = ~n_re,  
+                          data = graph_result)|>
   gf_labs(x = "numbers of cases per random effect group",
           y = "acf value of lag(1)")+
   theme(
@@ -301,200 +302,220 @@ n_re_box <- gf_boxplot(acfs ~ condition, fill = ~re_size,  data = result)|>
     panel.background = element_rect(fill = "white", color = NA),
     axis.text.x = element_text(angle = 45, hjust = 1)
   )
-n_re_box
+n_group_box
 ```
 
 # Compare models with and without the RE
 
-The work below I haven't been able to revise it. 
+The work below is under revision
 
 ```{r}
+#| eval: false
+#| label: test_case
 
-# simulation setting
 
-n <- 500 # rows in sim dataset
+# Preallocate result
 
-n_re <- 2 # size of RE groups
+no_re_result <- expand.grid(
+  # number of cases in random effect group
+  n_re = c(2,3,4),
+  # group_sd = random intercept standard deviation (eventually want to add 1,2,4)
+  group_sd = c(0.1, 0.25,0.5,1),
+
+  # for now 200 iteration for each setting,
+
+  iteration = 1:200)
+
+no_re_result<- no_re_result |>
+  mutate(row_index = row_number())
+
+for (item in coef_wide_names) {
+  no_re_result[[item]] <- NA}
+
+```
+
+```{r}
+# simulation setting that stays constant
 
 b1 <- 1.5 # x1 slope
 
 b2 <- -0.5 # x2 slope
 
-# random intercept standard deviation
-group_sd <- 0.5
-
 # residual standard deviation
 resid_sd <- 1
+```
 
-# Preallocate result
-result <- data.frame(acfs = rep(NA, n),
-                     b1 = rep(NA,n),
-                     p_x1 = rep(NA,n),
-                     se_x1 = rep(NA,n),
-                     b2 = rep(NA,n),
-                     p_x2 = rep(NA,n),
-                     se_x2 = rep(NA,n),
-                     b3 = rep(NA,n),
-                     p_x3 = rep(NA,n),
-                     se_x3 = rep(NA,n),
-                     re = rep(NA, n) # whether it has random effect
-                     )
-
-
+```{r}
 # for loop
 
-for(i in 1:500){
+for(i in 1:nrow(result)){
+  # number of observations in a random effect group
+  n_re <- no_re_result$n_re[i]
   
-# simulate data
+  # rows in sim dataset 
+  # fluctuate according to how many number of observations are in a re group
+  # such that there's consistent number of groups.
+  # QUESTION: Do I need to change this part for because there's no random effect included in the model?
+  n <- 500 * n_re
+  
+  # number of RE groups
+  n_group <- floor(n/n_re)
   
   sim_data <- data.frame(
+    
     x1 = rnorm(n, mean = 0, sd = 1),
     x2 = rnorm(n, mean = 0, sd = 1),
     x3 = rnorm(n, mean = 0, sd = 1),
-    re_group = gl(n = floor(n / 2), k = n_re, length = n),
+    
+    re_group = gl(n = n_group, k = n_re, length = n),
+    
     resid = rnorm(n, mean = 0, sd = resid_sd)
   ) |>
     group_by(re_group) |>
     mutate(alpha = rnorm(1, mean = 0, sd = group_sd)) |>
     ungroup() |>
     mutate(response = 0 + alpha + b1 * x1 + b2 * x2 + resid)
-
-# model
   
-    if(i < n/2){
-    result$re[i] <- "random effect"
-    
-    model <- glmmTMB(response ~ x1 + x2 + x3 + (1 | re_group), data = sim_data)
-    
-  } else {
-    result$re[i] <- "no random effect"
-    
-    model <- glmmTMB(response ~ x1 + x2 + x3, data = sim_data)
-  }
-  
+  model <- glmmTMB(response  ~ x1 + x2 + x3, data = sim_data)
 
   acf_out <- acf(resid(model), plot = FALSE)
-
-  coef_df <- as.data.frame(summary(model)$coefficients$cond)
-
-  result$b1[i] <- coef_df["x1", "Estimate"]
-
-  result$b2[i] <- coef_df["x2", "Estimate"]
-
-  result$b3[i] <- coef_df["x3", "Estimate"]
-
-  result$p_x1[i] <- coef_df["x1", "Pr(>|z|)"]
-
-  result$p_x2[i] <- coef_df["x2", "Pr(>|z|)"]
-
-  result$p_x3[i] <- coef_df["x3", "Pr(>|z|)"]
   
-  result$se_x1[i] <- coef_df["x1","Std. Error"]
+  no_re_result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
   
-  result$se_x2[i] <- coef_df["x2","Std. Error"]
+  # apply function to get coeficient table in wide format from model
+  coef_wide <- pivot_coef_table(model)
   
-  result$se_x3[i] <- coef_df["x3","Std. Error"]
-
-  result$acfs[i] <- acf_out$acf[acf_out$lag == 1]
-  
+  for (col in coef_wide_names) {
+    no_re_result[[col]][i] <- coef_wide[[col]]
+  }
 }
 
-glimpse(result)
 ```
+This loop took about 30 minutes. Also I was wondering why no_re_result has 2400 observations while the result only has 1800 when the prealocation are the same.
 
 ```{r}
-b1 <- gf_boxplot(b1 ~ re,  data = result)|>
+# combine dataset result and no_re_result
+result <- result |>
+  mutate(model = "re")
+
+no_re_result <- no_re_result |>
+  mutate(model = "no_re")
+
+combined_df <- result |>
+  bind_rows(no_re_result)
+```
+```{r}
+# filter n_re is ones that both dataset has 
+# could delete later, have it here because the re simulation didn't have sd = 1
+graph_combined <- combined_df |>
+  filter(group_sd != 1)|>
+  mutate(n_re = as.factor(n_re),
+         condition = paste0("re", n_re, "_sd", group_sd))
+```
+
+```{r, graph-x1}
+slope1 <- gf_boxplot( x1_Estimate ~ condition, fill = ~model,  data = graph_combined)|>
   gf_labs(x = "",
           title = "Compare slopes of models with and without random intercept")+
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
-    panel.background = element_rect(fill = "white", color = NA)  
+    panel.background = element_rect(fill = "white", color = NA),
+    axis.text.x = element_text(angle = 45, hjust = 1)
   )
-b2 <- gf_boxplot(b2 ~ re, data = result)|>
-  gf_labs(x = "")+
+
+slope2 <- gf_boxplot( x2_Estimate ~ condition, fill = ~model,  data = graph_combined)|>
+  gf_labs(x = "",
+          title = "")+
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
-    panel.background = element_rect(fill = "white", color = NA)  
+    panel.background = element_rect(fill = "white", color = NA),
+    axis.text.x = element_text(angle = 45, hjust = 1)
   )
-b3 <- gf_boxplot(b3 ~ re, data = result)|>
-  gf_labs(x = "")+
+
+slope3 <- gf_boxplot( x3_Estimate ~ condition, fill = ~model,  data = graph_combined)|>
+  gf_labs(x = "",
+          title = "")+
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
-    panel.background = element_rect(fill = "white", color = NA)  
+    panel.background = element_rect(fill = "white", color = NA),
+    axis.text.x = element_text(angle = 45, hjust = 1)
   )
-
-slopes <- b1 + b2 + b3
-
-
-slopes
-
-ggsave(filename = "figures/compare_slopes.png", 
-       plot = slopes, width = 9, height = 4, dpi = 300)
-
-```
-```{r}
-p1 <- gf_boxplot(p_x1 ~ re,  data = result)|>
-  gf_labs(x = "", 
-          y = "p value for x1",
-          title = "Compare p values of models with and without random intercept") +
-  theme(
-    plot.background = element_rect(fill = "white", color = NA), 
-    panel.background = element_rect(fill = "white", color = NA)  
-  )
-p2 <- gf_boxplot(p_x2 ~ re, data = result)|>
-  gf_labs(x = "", 
-          y = "p value for x2")+
-  theme(
-    plot.background = element_rect(fill = "white", color = NA), 
-    panel.background = element_rect(fill = "white", color = NA)  
-  )
-p3 <- gf_boxplot(p_x3 ~ re, data = result)|>
-  gf_labs(x = "", 
-          y = "p value for x3")+
-  theme(
-    plot.background = element_rect(fill = "white", color = NA), 
-    panel.background = element_rect(fill = "white", color = NA)  
-  )
-
-p_val <- p1 + p2 + p3
-p_val
-ggsave(filename = "figures/compare_pval.png", 
-       plot = p_val, width = 9, height = 4, dpi = 300)
+slope1
+slope2
+slope3
 
 ```
 
 ```{r}
-se_1 <- gf_boxplot(se_x1 ~ re,  data = result)|>
-  gf_labs(x = "", 
-          y = "Standard Error Value for x1",
-          title = "Compare standard error of models with and without random intercept")+
+p1 <- gf_boxplot( `x1_Pr(>|z|)` ~ condition, fill = ~model,  data = graph_combined)|>
+  gf_labs(x = "",
+          title = "Compare p value of models with and without random intercept")+
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
-    panel.background = element_rect(fill = "white", color = NA)  
+    panel.background = element_rect(fill = "white", color = NA),
+    axis.text.x = element_text(angle = 45, hjust = 1)
   )
-se_2 <- gf_boxplot(se_x2 ~ re, data = result)|>
-  gf_labs(x = "", 
-          y = "Standard Error Value for x2")+
+
+p2 <- gf_boxplot( `x2_Pr(>|z|)` ~ condition, fill = ~model,  data = graph_combined)|>
+  gf_labs(x = "",
+          title = "Compare p value of models with and without random intercept")+
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
-    panel.background = element_rect(fill = "white", color = NA)  
+    panel.background = element_rect(fill = "white", color = NA),
+    axis.text.x = element_text(angle = 45, hjust = 1)
   )
-se_3 <- gf_boxplot(se_x3 ~ re, data = result)|>
-  gf_labs(x = "", 
-          y = "Standard Error Value for x3")+
+
+p3 <- gf_boxplot( `x3_Pr(>|z|)` ~ condition, fill = ~model,  data = graph_combined)|>
+  gf_labs(x = "",
+          title = "Compare p value of models with and without random intercept")+
   theme(
     plot.background = element_rect(fill = "white", color = NA), 
-    panel.background = element_rect(fill = "white", color = NA)  
+    panel.background = element_rect(fill = "white", color = NA),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+p1
+p2
+p3
+
+
+```
+
+```{r}
+se1 <- gf_boxplot( `x1_Std. Error` ~ condition, fill = ~model,  data = graph_combined)|>
+  gf_labs(x = "",
+          title = "Compare p value of models with and without random intercept")+
+  theme(
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.background = element_rect(fill = "white", color = NA),
+    axis.text.x = element_text(angle = 45, hjust = 1)
   )
 
-se <- se_1 + se_2 + se_3
+se2 <- gf_boxplot( `x2_Std. Error` ~ condition, fill = ~model,  data = graph_combined)|>
+  gf_labs(x = "",
+          title = "Compare p value of models with and without random intercept")+
+  theme(
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.background = element_rect(fill = "white", color = NA),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
 
-se
+se3 <- gf_boxplot( `x3_Std. Error` ~ condition, fill = ~model,  data = graph_combined)|>
+  gf_labs(x = "",
+          title = "Compare p value of models with and without random intercept")+
+  theme(
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.background = element_rect(fill = "white", color = NA),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+se1
+se2
+se3
 
-ggsave(filename = "figures/compare_se.png", plot = se, width = 9, height = 4, dpi = 300)
+
+# ggsave(filename = "figures/compare_se.png", plot = se, width = 9, height = 4, dpi = 300)
 
 ```
 
 
-
+Question: Why my graph has warnings 450 rows containing non-finite values, all cells should be complete.
 
